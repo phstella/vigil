@@ -1,151 +1,54 @@
 # Epic 0: Repository Genesis & Infrastructure
 
-## Task [0.1]: Initialize Toolchains -- DONE
-Goal: Standardize Linux/Windows contributor environments for Rust + Node development.
-Commands/Code:
-```bash
-node --version
-npm --version
-rustc --version
-cargo --version
-cargo fmt --help
-cargo clippy --help
-```
-Note: On Arch Linux, use system `rust` package (includes rustfmt + clippy). On other platforms, use `rustup` with `rustup component add rustfmt clippy`. See `docs/setup/toolchain-requirements.md`.
+Canonical numbering: Tasks [0.1]–[0.11] per `00-unified-vigil-backlog.md`.
 
+## Task [0.1]: Define Product Identity and MVP Boundaries -- DONE
+Goal: Establish name, tagline, MVP scope (Epics 0-3), and out-of-scope items.
+Acceptance Criteria: "Vigil" name + tagline consistent across README and docs. **PASSED**
+
+## Task [0.2]: Initialize Toolchains -- DONE
+Goal: Standardize Linux/Windows contributor environments for Rust + Node development.
 Verified versions (2026-03-10):
 - Node v25.7.0, npm 11.11.0
 - rustc 1.93.1, cargo 1.93.1
 - rustfmt 1.8.0, clippy 0.1.93
+Acceptance Criteria: Tool versions resolve without error. **PASSED**
 
-Acceptance Criteria: Tool versions resolve without error and `cargo fmt --help` plus `cargo clippy --help` both run. **PASSED**
-
-## Task [0.2]: Scaffold SvelteKit Frontend (TypeScript)
+## Task [0.3]: Scaffold SvelteKit Frontend (TypeScript) -- DONE
 Goal: Create the frontend SPA base that Tauri will host.
-Commands/Code:
-```bash
-mkdir vigil
-cd vigil
-npx sv create .
-npm install
-```
-Select prompts: `SvelteKit minimal`, `TypeScript`, `ESLint`, `Prettier`.
-Acceptance Criteria: `npm run dev` launches on `http://localhost:5173`.
+Acceptance Criteria: `npm run dev` launches on `http://localhost:5173`. **PASSED**
 
-## Task [0.3]: Add Tauri Shell and Rust Backend
+## Task [0.4]: Add Tauri Shell and Rust Backend -- DONE
 Goal: Add desktop runtime and Rust project under `src-tauri/`.
-Commands/Code:
-```bash
-npm install -D @tauri-apps/cli@latest
-npx tauri init
-```
-Prompt values:
-- App name `Vigil`
-- Window title `Vigil`
-- Dev URL `http://localhost:5173`
-- Frontend dev command `npm run dev`
-- Frontend build command `npm run build`
-- Frontend dist `../build`
-Acceptance Criteria: `npx tauri dev` opens a desktop window.
+Acceptance Criteria: `cargo check --manifest-path src-tauri/Cargo.toml` passes. **PASSED**
 
-## Task [0.4]: Configure SvelteKit Static SPA Output for Tauri
+## Task [0.5]: Configure SvelteKit Static SPA Output for Tauri -- DONE
 Goal: Ensure a deterministic static build for desktop packaging.
-Commands/Code:
-```bash
-npm install -D @sveltejs/adapter-static
-```
-Modify files:
-- `svelte.config.js`
-- `src/routes/+layout.ts`
-- `src-tauri/tauri.conf.json`
-Acceptance Criteria: `npm run build` emits `build/` and `npx tauri dev` serves the built app without SSR errors.
+Acceptance Criteria: `npm run build` emits `build/` with static output. **PASSED**
 
-## Task [0.5]: Install Tailwind and Global Style Entry
-Goal: Enable utility-first styling for the mock-aligned interface.
-Commands/Code:
-```bash
-npm install tailwindcss @tailwindcss/vite
-```
-Modify files:
-- `vite.config.ts`
-- `src/app.css`
-- `src/routes/+layout.svelte`
-Acceptance Criteria: Tailwind classes apply to rendered UI.
+## Task [0.6]: Install Tailwind and Baseline Design Tokens -- DONE
+Goal: Enable utility-first styling with dark theme design tokens.
+Acceptance Criteria: Tailwind classes apply to rendered UI; build passes. **PASSED**
 
-## Task [0.6]: Materialize Strict Folder Structure
+## Task [0.7]: Materialize Strict Folder Structure -- DONE
 Goal: Create feature-oriented directories mapped to the mocked UI zones.
-Commands/Code:
-```bash
-mkdir -p docs/architecture docs/tickets
-mkdir -p src/lib/components/{layout,chrome}
-mkdir -p src/lib/features/{workspace,explorer,editor,omnibar,links,git,status,theme}
-mkdir -p src/lib/{stores,ipc,styles,types,utils}
-mkdir -p src-tauri/src/{commands,core,models,state,events}
-mkdir -p src-tauri/src/core/{fs,index,search,git,links}
-mkdir -p src-tauri/{tests,capabilities}
-```
-Acceptance Criteria: All listed directories exist and match `docs/architecture/01-repository-architecture.md`.
+Acceptance Criteria: All directories exist and match `docs/architecture/01-repository-architecture.md`. **PASSED**
 
-## Task [0.7]: Configure Lint/Format Standards -- DONE
+## Task [0.8]: Define IPC Contracts and Workspace Data Model Docs -- DONE
+Goal: Complete IPC command/event surface and workspace data model specs.
+Acceptance Criteria: 11 MVP commands, 6 event channels, 18 data models documented. **PASSED**
+
+## Task [0.9]: Author Architecture and UI Mock/Component Map -- DONE
+Goal: Convert the design mock into architecture and component mapping docs.
+Acceptance Criteria: Every UI region maps to a component and backend dependency. **PASSED**
+
+## Task [0.10]: Configure Lint/Format Standards -- DONE
 Goal: Enforce consistent code quality across Rust and frontend stacks.
-Commands/Code:
-```bash
-npm install -D eslint prettier
-cargo fmt --manifest-path src-tauri/Cargo.toml --all
-cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
-npx eslint .
-npx prettier . --check
-```
-Create/modify files:
-- `package.json`
-- `.prettierrc`
-- `.prettierignore`
-- `.editorconfig`
-- `rustfmt.toml`
-- `clippy.toml`
-- `eslint.config.js`
-
-Completed (2026-03-10):
-- Created `.editorconfig` (UTF-8, LF line endings, tabs for JS/Svelte, spaces for Rust/YAML)
-- Created `rustfmt.toml` (edition 2021, max_width 100, field init and try shorthand)
-- Created `clippy.toml` (MSRV 1.77.2)
-- Added npm scripts: `lint:rs`, `lint:all`, `format:rs`, `format:rs:check`, `format:all`, `format:all:check`
-- Added `src-tauri/target/` to ESLint ignores (was picking up Tauri build artifacts)
-- Fixed Prettier quote style in `src/app.css` (double -> single to match `.prettierrc`)
-
+Files: `.editorconfig`, `rustfmt.toml`, `clippy.toml`, `eslint.config.js`, `.prettierrc`
+Scripts: `lint:all`, `format:all:check`
 Acceptance Criteria: All lint and format checks pass locally. **PASSED**
 
-## Task [0.8]: Author Mock-Driven UI Spec
-Goal: Convert the screenshot into an implementation contract before coding features.
-Commands/Code:
-Create/modify files:
-- `docs/architecture/02-ui-mock-component-map.md`
-- `docs/architecture/01-repository-architecture.md`
-Acceptance Criteria: Every visible UI region in the mock maps to a component and backend dependency.
-
-## Task [0.9]: Establish CI Quality Gates -- DONE
-Goal: Prevent regressions in formatting, linting, builds, and tests.
-Commands/Code:
-Create/modify file:
-- `.github/workflows/ci.yml`
-Include commands:
-```bash
-npm ci
-npm run build
-npx eslint .
-npx prettier . --check
-cargo fmt --check --manifest-path src-tauri/Cargo.toml
-cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
-cargo test --manifest-path src-tauri/Cargo.toml
-```
-
-Completed (2026-03-10):
-- Created `.github/workflows/ci.yml` with two jobs: frontend checks and Rust checks
-- Frontend job: npm ci, svelte-check, ESLint, Prettier format check, vite build
-- Rust job: installs Tauri system deps, cargo fmt --check, clippy -D warnings, cargo test
-- Triggers on push to main/master and all PRs
-- Caches node_modules (via setup-node) and cargo registry/build artifacts
-- Enhanced `src-tauri/capabilities/default.json` with core:window:default and core:event:default
-- Updated `docs/qa/test-matrix.md` with CI quality gates table
-
-Acceptance Criteria: CI runs on push/PR and blocks merges on failures. **PASSED**
+## Task [0.11]: Add CI Quality Gates and Baseline Tauri Capabilities -- DONE
+Goal: Prevent regressions via CI and declare baseline Tauri permissions.
+Files: `.github/workflows/ci.yml`, `src-tauri/capabilities/default.json`
+Acceptance Criteria: CI runs on push/PR; baseline capabilities declared. **PASSED**

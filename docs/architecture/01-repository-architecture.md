@@ -33,7 +33,7 @@ vigil/
     app.css                              # Tailwind v4 entry + design tokens
     app.html                             # HTML shell
     routes/
-      +layout.ts                         # ssr=false, prerender=false
+      +layout.ts                         # ssr=false, prerender=true
       +layout.svelte                     # Root layout (imports app.css)
       +page.svelte                       # Main workspace shell
     lib/

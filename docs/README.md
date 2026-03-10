@@ -1,5 +1,7 @@
 # Vigil Planning Docs
 
+> Lightning-fast editing. Interconnected thinking.
+
 ## Canonical Plan
 1. [Unified Vigil Backlog (Canonical)](tickets/00-unified-vigil-backlog.md)
 2. [Execution Order (Canonical)](tickets/00-mvp-execution-order.md)
@@ -24,6 +26,12 @@
 
 ## QA
 - [Test Matrix](qa/test-matrix.md)
+
+## MVP Scope
+
+Epics 0-3 define the MVP baseline. Epic 4 is post-MVP expansion.
+
+**Out of scope:** Vim mode, plugin store/marketplace flow.
 
 ## Notes
 - Detailed implementation references from the claude branch are preserved under `vigil-plan/`.

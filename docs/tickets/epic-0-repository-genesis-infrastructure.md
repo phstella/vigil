@@ -1,18 +1,24 @@
 # Epic 0: Repository Genesis & Infrastructure
 
-## Task [0.1]: Initialize Toolchains
+## Task [0.1]: Initialize Toolchains -- DONE
 Goal: Standardize Linux/Windows contributor environments for Rust + Node development.
 Commands/Code:
 ```bash
 node --version
 npm --version
-rustup --version
+rustc --version
 cargo --version
-rustup update stable
-rustup default stable
-rustup component add rustfmt clippy
+cargo fmt --help
+cargo clippy --help
 ```
-Acceptance Criteria: Tool versions resolve without error and `cargo fmt --help` plus `cargo clippy --help` both run.
+Note: On Arch Linux, use system `rust` package (includes rustfmt + clippy). On other platforms, use `rustup` with `rustup component add rustfmt clippy`. See `docs/setup/toolchain-requirements.md`.
+
+Verified versions (2026-03-10):
+- Node v25.7.0, npm 11.11.0
+- rustc 1.93.1, cargo 1.93.1
+- rustfmt 1.8.0, clippy 0.1.93
+
+Acceptance Criteria: Tool versions resolve without error and `cargo fmt --help` plus `cargo clippy --help` both run. **PASSED**
 
 ## Task [0.2]: Scaffold SvelteKit Frontend (TypeScript)
 Goal: Create the frontend SPA base that Tauri will host.

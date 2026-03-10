@@ -9,8 +9,14 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "eslint .",
+		"lint:rs": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings",
+		"lint:all": "npm run lint && npm run lint:rs",
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
+		"format:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
+		"format:rs:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --all --check",
+		"format:all": "npm run format && npm run format:rs",
+		"format:all:check": "npm run format:check && npm run format:rs:check",
 		"tauri": "tauri"
 	},
 	"devDependencies": {

@@ -86,7 +86,7 @@ mkdir -p src-tauri/{tests,capabilities}
 ```
 Acceptance Criteria: All listed directories exist and match `docs/architecture/01-repository-architecture.md`.
 
-## Task [0.7]: Configure Lint/Format Standards
+## Task [0.7]: Configure Lint/Format Standards -- DONE
 Goal: Enforce consistent code quality across Rust and frontend stacks.
 Commands/Code:
 ```bash
@@ -101,7 +101,19 @@ Create/modify files:
 - `.prettierrc`
 - `.prettierignore`
 - `.editorconfig`
-Acceptance Criteria: All lint and format checks pass locally.
+- `rustfmt.toml`
+- `clippy.toml`
+- `eslint.config.js`
+
+Completed (2026-03-10):
+- Created `.editorconfig` (UTF-8, LF line endings, tabs for JS/Svelte, spaces for Rust/YAML)
+- Created `rustfmt.toml` (edition 2021, max_width 100, field init and try shorthand)
+- Created `clippy.toml` (MSRV 1.77.2)
+- Added npm scripts: `lint:rs`, `lint:all`, `format:rs`, `format:rs:check`, `format:all`, `format:all:check`
+- Added `src-tauri/target/` to ESLint ignores (was picking up Tauri build artifacts)
+- Fixed Prettier quote style in `src/app.css` (double -> single to match `.prettierrc`)
+
+Acceptance Criteria: All lint and format checks pass locally. **PASSED**
 
 ## Task [0.8]: Author Mock-Driven UI Spec
 Goal: Convert the screenshot into an implementation contract before coding features.

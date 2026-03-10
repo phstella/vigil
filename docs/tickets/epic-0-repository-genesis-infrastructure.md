@@ -123,7 +123,7 @@ Create/modify files:
 - `docs/architecture/01-repository-architecture.md`
 Acceptance Criteria: Every visible UI region in the mock maps to a component and backend dependency.
 
-## Task [0.9]: Establish CI Quality Gates
+## Task [0.9]: Establish CI Quality Gates -- DONE
 Goal: Prevent regressions in formatting, linting, builds, and tests.
 Commands/Code:
 Create/modify file:
@@ -138,4 +138,14 @@ cargo fmt --check --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
-Acceptance Criteria: CI runs on push/PR and blocks merges on failures.
+
+Completed (2026-03-10):
+- Created `.github/workflows/ci.yml` with two jobs: frontend checks and Rust checks
+- Frontend job: npm ci, svelte-check, ESLint, Prettier format check, vite build
+- Rust job: installs Tauri system deps, cargo fmt --check, clippy -D warnings, cargo test
+- Triggers on push to main/master and all PRs
+- Caches node_modules (via setup-node) and cargo registry/build artifacts
+- Enhanced `src-tauri/capabilities/default.json` with core:window:default and core:event:default
+- Updated `docs/qa/test-matrix.md` with CI quality gates table
+
+Acceptance Criteria: CI runs on push/PR and blocks merges on failures. **PASSED**

@@ -35,7 +35,22 @@
 | QA-105 | Plugin capability prompt/enforcement | Required | Required | Requested capabilities shown and enforced |
 | QA-106 | Plugin runtime isolation | Required | Required | Faulted plugin is isolated without crashing host |
 
+## CI Quality Gates (Automated)
+
+All of the following are enforced by `.github/workflows/ci.yml` on every push to main/master and on every pull request:
+
+| Gate | Job | Command | Blocks merge on failure |
+|---|---|---|---|
+| Type checking | Frontend | `npm run check` | Yes |
+| ESLint | Frontend | `npm run lint` | Yes |
+| Prettier | Frontend | `npm run format:check` | Yes |
+| Frontend build | Frontend | `npm run build` | Yes |
+| Rust formatting | Rust | `cargo fmt --check` | Yes |
+| Clippy lint | Rust | `cargo clippy -- -D warnings` | Yes |
+| Rust tests | Rust | `cargo test` | Yes |
+
 ## Regression Checklist per PR
+- CI quality gates pass (automated, see table above).
 - Lint/format checks pass.
 - Rust tests pass.
 - At least QA-001 through QA-007 manually verified for UI-affecting PRs.

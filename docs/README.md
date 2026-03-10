@@ -24,6 +24,9 @@
 - [Keyboard Map](specs/keyboard-map.md)
 - [Plugin Sandbox Model](specs/plugin-sandbox-model.md)
 
+## Implementation Diary
+- Per-task append-only logs under `implementation-diary/`.
+
 ## QA
 - [Test Matrix](qa/test-matrix.md)
 

@@ -22,7 +22,7 @@ Define a deterministic, keyboard-centric interaction model.
 - `Enter`: open selected item/execute command
 - `Esc`: close omnibar
 - `ArrowUp/ArrowDown`: move selection
-- `Ctrl+J` / `Ctrl+K`: optional Vim-like list navigation
+- `Ctrl+J` / `Ctrl+K`: fast list navigation
 
 ## Editor Controls
 - `Tab`: indent or snippet expansion
@@ -31,20 +31,13 @@ Define a deterministic, keyboard-centric interaction model.
 - `Alt+Up/Alt+Down`: move line/selection
 
 ## Markdown-Specific
-- `Ctrl+.`: toggle markdown live-render mode (Epic 4)
+- `Ctrl+.`: toggle markdown live-render mode
 - `[[`: trigger link suggestions
-
-## Vim Mode (Epic 4)
-- `Ctrl+Alt+V`: toggle Vim mode
-- Normal mode: movement/operators from Vim mapping layer.
-- Insert mode: standard editor input behavior.
-- Status bar must indicate `VIM: NORMAL` or `VIM: INSERT`.
 
 ## Conflict Rules
 1. Active overlay shortcuts have highest priority.
 2. Editor-level shortcuts override global shortcuts only when explicitly mapped.
-3. If Vim mode is enabled, Vim bindings supersede editor defaults in normal mode.
-4. Any shortcut conflict must be declared in settings UI before shipping.
+3. Any shortcut conflict must be declared in settings UI before shipping.
 
 ## Accessibility Notes
 - Provide remapping file in settings for non-US keyboards.

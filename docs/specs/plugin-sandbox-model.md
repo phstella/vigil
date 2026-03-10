@@ -33,7 +33,7 @@ Optional fields:
 
 Policy:
 - Deny by default.
-- User must explicitly approve requested capabilities at install time.
+- User must explicitly approve requested capabilities at enable/install time.
 - Capability grants are persisted per workspace.
 
 ## Security Controls
@@ -49,7 +49,7 @@ Policy:
 - Incompatible versions are rejected with actionable error.
 
 ## Lifecycle
-1. Install manifest + wasm artifact.
+1. Add manifest + wasm artifact from a local source.
 2. Validate schema, checksum, capability policy.
 3. Register plugin metadata in local registry.
 4. Enable plugin and initialize runtime instance.
@@ -57,21 +57,22 @@ Policy:
 6. On crash, mark unhealthy and isolate from host process.
 
 ## UI Integration
-- Omnibar command: `> Install Plugin`.
 - Plugin management panel:
   - list installed plugins
+  - add/remove local plugin artifacts
   - enable/disable
   - show requested/granted capabilities
   - display runtime health and last error
 
 ## Audit Logging
 Record plugin actions locally:
-- install/upgrade/uninstall events
+- add/upgrade/remove events
 - capability grants/revocations
 - runtime faults/timeouts
 - network capability usage
 
 ## Non-Goals (Initial)
+- Plugin store marketplace flow.
 - Remote code execution outside WASM sandbox.
 - Arbitrary native dynamic library loading.
 - Background plugin daemons outside host runtime.

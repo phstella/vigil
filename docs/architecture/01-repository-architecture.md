@@ -13,6 +13,7 @@ vigil/
       02-ui-mock-component-map.md
     tickets/
       00-mvp-execution-order.md
+      00-unified-vigil-backlog.md
       epic-0-repository-genesis-infrastructure.md
       epic-1-backend-foundation.md
       epic-2-frontend-skeleton.md
@@ -31,7 +32,6 @@ vigil/
         preview/
         graph/
         omnibar/
-        vim/
         links/
         git/
         status/
@@ -69,7 +69,7 @@ vigil/
 - `src/lib/components/*`: reusable UI primitives and shell/chrome elements.
 - `src/lib/features/*`: feature-specific UI state and orchestration.
 
-## UI Composition Target (from mock + expansion chat)
+## UI Composition Target
 - Primary rail: app icons and workspace switch affordances.
 - Explorer sidebar: collections, notes list, counts, quick filters.
 - Center pane: markdown note title/body and highlight blocks.

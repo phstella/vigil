@@ -91,6 +91,7 @@ impl FileIndex {
     /// Uses the `ignore` crate which respects `.gitignore` and `.ignore` files
     /// by default. Returns counts for the `index-ready` event.
     pub fn full_scan(&self) -> ScanResult {
+        let _perf = crate::core::perf::PerfTimer::start("FileIndex::full_scan");
         let start = std::time::Instant::now();
         let root = self.root.clone();
 

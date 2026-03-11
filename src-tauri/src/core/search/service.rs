@@ -35,6 +35,7 @@ impl<'a> FuzzyFinder<'a> {
     /// When `query` is empty, returns the most-recently-modified files up to
     /// `limit` (providing a useful default for the omnibar).
     pub fn fuzzy_find(&self, query: &str, limit: usize) -> Vec<FuzzyMatch> {
+        let _perf = crate::core::perf::PerfTimer::start("FuzzyFinder::fuzzy_find");
         let limit = limit.min(MAX_RESULTS);
         let files = self.index.get_all_files();
 

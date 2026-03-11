@@ -42,6 +42,7 @@ impl GitService {
     /// - The file is untracked
     /// - HEAD does not exist (empty repo with no commits)
     pub fn get_hunks(&self, rel_path: &str) -> Result<GitHunksResponse, VigilError> {
+        let _perf = crate::core::perf::PerfTimer::start("GitService::get_hunks");
         let repo = match self.open_repo() {
             Some(r) => r,
             None => return Ok(GitHunksResponse { hunks: vec![] }),

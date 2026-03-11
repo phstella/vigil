@@ -5,5 +5,6 @@ pub mod git;
 pub mod graph;
 pub mod index;
 pub mod links;
+pub mod perf;
 pub mod plugins;
 pub mod search;

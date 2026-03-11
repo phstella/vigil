@@ -48,6 +48,7 @@ impl<'a> ContentSearcher<'a> {
         workspace_root: &Path,
         limit: usize,
     ) -> Vec<ContentMatch> {
+        let _perf = crate::core::perf::PerfTimer::start("ContentSearcher::search_content");
         let limit = limit.min(MAX_RESULTS);
 
         if query.is_empty() {

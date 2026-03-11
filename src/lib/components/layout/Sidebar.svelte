@@ -8,6 +8,7 @@
 	import type { Snippet } from 'svelte';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
 	import { ExplorerPanel, SearchPanel } from '$lib/features/explorer';
+	import { GraphView } from '$lib/features/graph';
 
 	let {
 		isOpen = false,
@@ -50,9 +51,7 @@
 			{:else if activeSection === 'search'}
 				<SearchPanel />
 			{:else if activeSection === 'graph'}
-				<div class="p-3">
-					<p class="text-sm text-text-muted">Graph view will appear here.</p>
-				</div>
+				<GraphView />
 			{:else if activeSection === 'tags'}
 				<div class="p-3">
 					<p class="text-sm text-text-muted">Tag browser will appear here.</p>

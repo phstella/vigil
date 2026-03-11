@@ -1,10 +1,26 @@
 <script lang="ts">
 	import { AppShell, Sidebar, TitleBar, WorkspaceGrid } from '$lib/components/layout';
 	import { PrimaryRail } from '$lib/components/chrome';
+	import { EditorRouter } from '$lib/features/editor';
+	import { editorStore } from '$lib/stores/editor';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
+	import type { EditorState } from '$lib/types/store';
 
 	let activeSection: Section | null = $state(null);
 	let sidebarOpen = $derived(activeSection !== null);
+
+	// Subscribe to the global editor store to feed the EditorRouter.
+	let editorState: EditorState = $state({
+		activeFile: null,
+		openFiles: [],
+		isDirty: false,
+		content: '',
+		language: 'plaintext'
+	});
+
+	editorStore.subscribe((s) => {
+		editorState = s;
+	});
 
 	function handleSectionChange(section: Section | null) {
 		activeSection = section;
@@ -31,20 +47,20 @@
 		{/snippet}
 
 		{#snippet rightPanel()}
-			<div class="flex h-full items-center justify-center bg-surface-raised p-4">
-				<div class="text-center">
-					<p class="text-sm font-medium text-text-secondary">Code Pane</p>
-					<p class="mt-1 text-xs text-text-muted">Right split panel</p>
-				</div>
-			</div>
+			<EditorRouter
+				filePath={editorState.activeFile && !editorState.activeFile.endsWith('.md')
+					? editorState.activeFile
+					: null}
+				content={editorState.activeFile && !editorState.activeFile.endsWith('.md')
+					? editorState.content
+					: ''}
+			/>
 		{/snippet}
 
-		<div class="flex h-full items-center justify-center p-4">
-			<div class="text-center">
-				<h1 class="text-2xl font-semibold text-text-primary">Vigil</h1>
-				<p class="mt-1 text-sm text-text-muted">Open a workspace to get started</p>
-			</div>
-		</div>
+		<EditorRouter
+			filePath={editorState.activeFile?.endsWith('.md') ? editorState.activeFile : null}
+			content={editorState.activeFile?.endsWith('.md') ? editorState.content : ''}
+		/>
 	</WorkspaceGrid>
 
 	{#snippet statusbar()}

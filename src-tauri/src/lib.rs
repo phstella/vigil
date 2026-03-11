@@ -24,6 +24,7 @@ pub fn run() {
             commands::search::get_all_tags,
             commands::search::get_files_by_tag,
             commands::links::get_backlinks,
+            commands::status::workspace_status,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

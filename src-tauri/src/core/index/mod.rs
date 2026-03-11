@@ -1,5 +1,6 @@
 // Incremental indexer, tag index, and recursive file watcher.
 
+pub mod metrics;
 pub mod service;
 pub mod tag_index;
 pub mod watcher;

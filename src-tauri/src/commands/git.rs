@@ -36,9 +36,7 @@ pub async fn get_git_hunks(
 ///
 /// Returns an empty list if the workspace is not a git repository.
 #[tauri::command]
-pub async fn get_git_status(
-    state: State<'_, AppState>,
-) -> Result<Vec<GitStatusEntry>, VigilError> {
+pub async fn get_git_status(state: State<'_, AppState>) -> Result<Vec<GitStatusEntry>, VigilError> {
     let svc = require_git_service(&state)?;
     svc.get_status()
 }

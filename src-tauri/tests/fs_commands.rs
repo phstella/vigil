@@ -166,7 +166,11 @@ fn list_dir_marks_hidden_files() {
     let hidden = resp.entries.iter().find(|e| e.name == ".hidden").unwrap();
     assert!(hidden.is_hidden);
 
-    let visible = resp.entries.iter().find(|e| e.name == "visible.md").unwrap();
+    let visible = resp
+        .entries
+        .iter()
+        .find(|e| e.name == "visible.md")
+        .unwrap();
     assert!(!visible.is_hidden);
 }
 

@@ -55,11 +55,12 @@ impl FileWatcher {
             crossbeam_channel::unbounded();
 
         // Set up the notify watcher.
-        let watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-            if let Ok(event) = res {
-                let _ = raw_tx.send(event);
-            }
-        })?;
+        let watcher =
+            notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+                if let Ok(event) = res {
+                    let _ = raw_tx.send(event);
+                }
+            })?;
 
         let mut watcher = watcher;
         watcher.watch(root, RecursiveMode::Recursive)?;

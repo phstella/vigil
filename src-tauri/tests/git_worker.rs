@@ -160,7 +160,10 @@ fn status_clean_repo() {
     let svc = GitService::new(dir.path().to_path_buf());
 
     let entries = svc.get_status().unwrap();
-    assert!(entries.is_empty(), "clean repo should have no status entries");
+    assert!(
+        entries.is_empty(),
+        "clean repo should have no status entries"
+    );
 }
 
 #[test]

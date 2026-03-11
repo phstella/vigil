@@ -338,7 +338,8 @@ mod tests {
 
     #[test]
     fn skip_links_in_code_blocks() {
-        let content = "Before\n\n```\n[[should-skip]]\n[also](skip.md)\n```\n\nAfter [[real-link]]\n";
+        let content =
+            "Before\n\n```\n[[should-skip]]\n[also](skip.md)\n```\n\nAfter [[real-link]]\n";
         let links = parse_links(content, "source.md");
         assert_eq!(links.len(), 1);
         assert_eq!(links[0].target_path, "real-link.md");
@@ -367,10 +368,16 @@ mod tests {
         let links = parse_links(content, "source.md");
         assert_eq!(links.len(), 2);
 
-        let wiki = links.iter().find(|l| l.link_type == LinkType::Wikilink).unwrap();
+        let wiki = links
+            .iter()
+            .find(|l| l.link_type == LinkType::Wikilink)
+            .unwrap();
         assert_eq!(wiki.target_path, "wiki-note.md");
 
-        let md = links.iter().find(|l| l.link_type == LinkType::Markdown).unwrap();
+        let md = links
+            .iter()
+            .find(|l| l.link_type == LinkType::Markdown)
+            .unwrap();
         assert_eq!(md.target_path, "other.md");
     }
 

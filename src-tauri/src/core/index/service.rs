@@ -131,10 +131,7 @@ impl FileIndex {
                 Err(_) => continue,
             };
 
-            let name = entry
-                .file_name()
-                .to_string_lossy()
-                .into_owned();
+            let name = entry.file_name().to_string_lossy().into_owned();
 
             let kind = if metadata.is_dir() {
                 EntryKind::Dir
@@ -216,7 +213,11 @@ impl FileIndex {
     ///
     /// Returns a list of change records suitable for emitting as events.
     /// Paths are absolute; they are resolved relative to the workspace root.
-    pub fn handle_event(&self, paths: &[PathBuf], change_kind: ChangeKind) -> Vec<IndexChangeRecord> {
+    pub fn handle_event(
+        &self,
+        paths: &[PathBuf],
+        change_kind: ChangeKind,
+    ) -> Vec<IndexChangeRecord> {
         let mut changes = Vec::new();
 
         for abs_path in paths {
@@ -304,16 +305,23 @@ impl FileIndex {
                     inner.files.insert(rel_path.clone(), file_entry);
 
                     // Update or remove note metadata.
-                    if kind == EntryKind::File && !is_binary {
-                        if let Some(ref e) = ext {
-                            if e.eq_ignore_ascii_case("md") {
-                                if let Some(meta) =
-                                    extract_note_metadata(abs_path, &rel_path)
-                                {
-                                    inner.notes.insert(rel_path.clone(), meta);
-                                }
-                            }
+                    // A file that was previously .md may have been renamed to
+                    // a non-.md extension, may have become binary, or may fail
+                    // metadata extraction.  Always clean up stale entries.
+                    let is_md = kind == EntryKind::File
+                        && !is_binary
+                        && ext.as_ref().is_some_and(|e| e.eq_ignore_ascii_case("md"));
+
+                    if is_md {
+                        if let Some(meta) = extract_note_metadata(abs_path, &rel_path) {
+                            inner.notes.insert(rel_path.clone(), meta);
+                        } else {
+                            // Extraction failed (e.g., file unreadable) -- purge stale.
+                            inner.notes.remove(&rel_path);
                         }
+                    } else {
+                        // Not a markdown note (any more) -- remove if it was.
+                        inner.notes.remove(&rel_path);
                     }
 
                     changes.push(IndexChangeRecord {
@@ -442,8 +450,7 @@ fn extract_note_metadata(abs_path: &Path, rel_path: &str) -> Option<NoteMetadata
     let metadata = fs::metadata(abs_path).ok()?;
     let modified_at_ms = modified_epoch_ms(&metadata);
 
-    let (has_frontmatter, frontmatter_title, frontmatter_tags, body) =
-        parse_frontmatter(&content);
+    let (has_frontmatter, frontmatter_title, frontmatter_tags, body) = parse_frontmatter(&content);
 
     // Title: frontmatter title > first heading > filename stem
     let title = frontmatter_title
@@ -530,7 +537,11 @@ fn parse_frontmatter(content: &str) -> (bool, Option<String>, Vec<String>, Strin
                 // Inline array format: tags: [tag1, tag2]
                 let inner = &value[1..value.len() - 1];
                 for tag in inner.split(',') {
-                    let tag = tag.trim().trim_matches('"').trim_matches('\'').to_lowercase();
+                    let tag = tag
+                        .trim()
+                        .trim_matches('"')
+                        .trim_matches('\'')
+                        .to_lowercase();
                     if !tag.is_empty() {
                         tags.push(tag);
                     }
@@ -649,7 +660,10 @@ fn extract_inline_tags(body: &str) -> Vec<String> {
                 .collect();
             if !tag_clean.is_empty()
                 && tag_clean.len() <= 64
-                && tag_clean.chars().next().is_some_and(|c| c.is_alphanumeric())
+                && tag_clean
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphanumeric())
             {
                 let normalized = tag_clean.to_lowercase();
                 if !tags.contains(&normalized) {

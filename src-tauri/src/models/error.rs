@@ -118,11 +118,12 @@ impl From<VigilError> for tauri::ipc::InvokeError {
         let envelope = ErrorEnvelope::from(err);
         // Tauri serializes this JSON value and delivers it to the frontend
         // reject handler.
-        let value =
-            serde_json::to_value(envelope).unwrap_or_else(|e| serde_json::json!({
+        let value = serde_json::to_value(envelope).unwrap_or_else(|e| {
+            serde_json::json!({
                 "code": "INTERNAL_ERROR",
                 "message": format!("Failed to serialize error: {e}"),
-            }));
+            })
+        });
         tauri::ipc::InvokeError::from(value)
     }
 }

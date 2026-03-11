@@ -56,8 +56,7 @@ impl PerfTimer {
 impl Drop for PerfTimer {
     fn drop(&mut self) {
         let elapsed = self.start.elapsed();
-        let should_log = cfg!(debug_assertions)
-            || std::env::var("VIGIL_PERF").is_ok();
+        let should_log = cfg!(debug_assertions) || std::env::var("VIGIL_PERF").is_ok();
         if should_log {
             eprintln!(
                 "[perf] {}: {:.3} ms",

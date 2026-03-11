@@ -24,8 +24,7 @@ pub fn current_branch(root: &Path) -> Option<String> {
     }
 
     // Detached HEAD: return the short OID as a fallback.
-    head.target()
-        .map(|oid| format!("{:.7}", oid))
+    head.target().map(|oid| format!("{:.7}", oid))
 }
 
 /// Determine the sync state of the current branch relative to its upstream.
@@ -62,19 +61,35 @@ pub fn sync_state(root: &Path) -> SyncState {
     // Find the upstream branch reference.
     let branch_name = match head.shorthand() {
         Some(name) => name.to_string(),
-        None => return if has_changes { SyncState::Unknown } else { SyncState::Synced },
+        None => {
+            return if has_changes {
+                SyncState::Unknown
+            } else {
+                SyncState::Synced
+            }
+        }
     };
 
     let branch = match repo.find_branch(&branch_name, git2::BranchType::Local) {
         Ok(b) => b,
-        Err(_) => return if has_changes { SyncState::Unknown } else { SyncState::Synced },
+        Err(_) => {
+            return if has_changes {
+                SyncState::Unknown
+            } else {
+                SyncState::Synced
+            }
+        }
     };
 
     let upstream = match branch.upstream() {
         Ok(u) => u,
         Err(_) => {
             // No upstream configured; can't determine sync state.
-            return if has_changes { SyncState::Unknown } else { SyncState::Synced };
+            return if has_changes {
+                SyncState::Unknown
+            } else {
+                SyncState::Synced
+            };
         }
     };
 
@@ -98,8 +113,7 @@ pub fn sync_state(root: &Path) -> SyncState {
 /// Check if the repository has any uncommitted changes (staged or unstaged).
 fn has_uncommitted_changes(repo: &Repository) -> bool {
     let mut opts = git2::StatusOptions::new();
-    opts.include_untracked(true)
-        .recurse_untracked_dirs(false);
+    opts.include_untracked(true).recurse_untracked_dirs(false);
 
     match repo.statuses(Some(&mut opts)) {
         Ok(statuses) => !statuses.is_empty(),
@@ -130,9 +144,9 @@ mod tests {
         let repo = Repository::init(dir.path()).unwrap();
 
         // Need at least one commit for HEAD to point to a branch.
-        let sig = repo.signature().unwrap_or_else(|_| {
-            git2::Signature::now("test", "test@example.com").unwrap()
-        });
+        let sig = repo
+            .signature()
+            .unwrap_or_else(|_| git2::Signature::now("test", "test@example.com").unwrap());
         let tree_id = {
             let mut index = repo.index().unwrap();
             index.write_tree().unwrap()
@@ -153,9 +167,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = Repository::init(dir.path()).unwrap();
 
-        let sig = repo.signature().unwrap_or_else(|_| {
-            git2::Signature::now("test", "test@example.com").unwrap()
-        });
+        let sig = repo
+            .signature()
+            .unwrap_or_else(|_| git2::Signature::now("test", "test@example.com").unwrap());
         let tree_id = {
             let mut index = repo.index().unwrap();
             index.write_tree().unwrap()
@@ -174,9 +188,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let repo = Repository::init(dir.path()).unwrap();
 
-        let sig = repo.signature().unwrap_or_else(|_| {
-            git2::Signature::now("test", "test@example.com").unwrap()
-        });
+        let sig = repo
+            .signature()
+            .unwrap_or_else(|_| git2::Signature::now("test", "test@example.com").unwrap());
         let tree_id = {
             let mut index = repo.index().unwrap();
             index.write_tree().unwrap()

@@ -64,10 +64,7 @@ impl GitService {
         };
 
         // Get HEAD tree. If HEAD doesn't exist (no commits), diff against empty.
-        let head_tree = repo
-            .head()
-            .ok()
-            .and_then(|r| r.peel_to_tree().ok());
+        let head_tree = repo.head().ok().and_then(|r| r.peel_to_tree().ok());
 
         let mut diff_opts = DiffOptions::new();
         diff_opts.pathspec(repo_rel.to_string_lossy().as_ref());
@@ -171,7 +168,11 @@ fn map_git_status(status: git2::Status) -> GitFileStatus {
     if status.is_wt_renamed() || status.is_index_renamed() {
         return GitFileStatus::Renamed;
     }
-    if status.is_wt_modified() || status.is_index_modified() || status.is_wt_typechange() || status.is_index_typechange() {
+    if status.is_wt_modified()
+        || status.is_index_modified()
+        || status.is_wt_typechange()
+        || status.is_index_typechange()
+    {
         return GitFileStatus::Modified;
     }
     if status.is_ignored() {

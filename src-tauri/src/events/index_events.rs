@@ -91,7 +91,12 @@ pub fn emit_index_updated(app_handle: &AppHandle, records: &[IndexChangeRecord])
 }
 
 /// Emit a `vigil://index-ready` event after the initial scan completes.
-pub fn emit_index_ready(app_handle: &AppHandle, files_count: u64, notes_count: u64, duration_ms: u64) {
+pub fn emit_index_ready(
+    app_handle: &AppHandle,
+    files_count: u64,
+    notes_count: u64,
+    duration_ms: u64,
+) {
     let payload = IndexReadyPayload {
         files_count,
         notes_count,

@@ -34,11 +34,7 @@ fn build_test_workspace(n: usize) -> (tempfile::TempDir, FileIndex) {
             "---\ntags: [tag-{}, common]\n---\n\n# Note {i}\n\nThis is note number {i} with some searchable content.\n\nKeyword alpha bravo charlie delta.\n",
             i % 10
         );
-        fs::write(
-            subdir_path.join(format!("note-{i}.md")),
-            content,
-        )
-        .unwrap();
+        fs::write(subdir_path.join(format!("note-{i}.md")), content).unwrap();
     }
 
     let index = FileIndex::new(dir.path().to_path_buf());
@@ -197,11 +193,7 @@ fn perf_link_graph_rebuild() {
         let content = format!(
             "---\ntags: [linked]\n---\n\n# Linked Note {i}\n\nSee [[{next_subdir}/note-{next}]] for next.\n",
         );
-        fs::write(
-            dir.path().join(format!("{subdir}/note-{i}.md")),
-            content,
-        )
-        .unwrap();
+        fs::write(dir.path().join(format!("{subdir}/note-{i}.md")), content).unwrap();
     }
 
     // Re-scan to pick up the modified files
@@ -237,7 +229,9 @@ fn perf_git_hunks_latency() {
     config.set_str("user.email", "test@test.com").unwrap();
 
     // Create a file with many lines and commit
-    let lines: String = (0..2000).map(|i| format!("Line {i}: original content\n")).collect();
+    let lines: String = (0..2000)
+        .map(|i| format!("Line {i}: original content\n"))
+        .collect();
     fs::write(dir.path().join("big-file.md"), &lines).unwrap();
 
     let mut idx = repo.index().unwrap();
@@ -272,10 +266,7 @@ fn perf_git_hunks_latency() {
 
     // Budget: 200 ms for git hunk refresh in release build.
     // Debug allowance: 10x => 2000 ms.
-    assert!(
-        ms < 2000.0,
-        "get_hunks took {ms:.1} ms, expected < 2000 ms"
-    );
+    assert!(ms < 2000.0, "get_hunks took {ms:.1} ms, expected < 2000 ms");
 
     assert!(!resp.hunks.is_empty(), "should detect modified hunks");
 }
@@ -341,11 +332,24 @@ fn perf_full_workflow_open_to_search() {
     let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
     eprintln!("[perf-budget] Full workflow (200 files):");
-    eprintln!("  scan:     {scan_ms:.1} ms  ({} files, {} notes)", scan.files_count, scan.notes_count);
-    eprintln!("  tags:     {tag_ms:.1} ms  ({} tags)", tag_index.get_all_tags().len());
+    eprintln!(
+        "  scan:     {scan_ms:.1} ms  ({} files, {} notes)",
+        scan.files_count, scan.notes_count
+    );
+    eprintln!(
+        "  tags:     {tag_ms:.1} ms  ({} tags)",
+        tag_index.get_all_tags().len()
+    );
     eprintln!("  links:    {link_ms:.1} ms");
-    eprintln!("  fuzzy:    {fuzzy_ms:.1} ms  ({} results)", fuzzy_results.len());
-    eprintln!("  content:  {:.1} ms  ({} results)", total_ms - scan_ms - tag_ms - link_ms - fuzzy_ms, content_results.len());
+    eprintln!(
+        "  fuzzy:    {fuzzy_ms:.1} ms  ({} results)",
+        fuzzy_results.len()
+    );
+    eprintln!(
+        "  content:  {:.1} ms  ({} results)",
+        total_ms - scan_ms - tag_ms - link_ms - fuzzy_ms,
+        content_results.len()
+    );
     eprintln!("  TOTAL:    {total_ms:.1} ms");
 
     // The entire workflow for 200 files should complete in under 10 seconds

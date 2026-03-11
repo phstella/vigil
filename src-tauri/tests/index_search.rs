@@ -38,11 +38,7 @@ fn full_scan_with_files_and_notes() {
     fs::write(dir.path().join("readme.md"), "# Readme\n\nHello.").unwrap();
     fs::write(dir.path().join("config.txt"), "key=value").unwrap();
     fs::create_dir(dir.path().join("notes")).unwrap();
-    fs::write(
-        dir.path().join("notes/daily.md"),
-        "# Daily\n\nSome notes.",
-    )
-    .unwrap();
+    fs::write(dir.path().join("notes/daily.md"), "# Daily\n\nSome notes.").unwrap();
     fs::write(dir.path().join("notes/todo.md"), "# Todo\n\n- item 1").unwrap();
 
     let index = FileIndex::new(dir.path().to_path_buf());
@@ -280,7 +276,11 @@ fn incremental_modify_updates_metadata() {
     assert_eq!(meta.title, "Version 1");
 
     // Modify the file.
-    fs::write(&file_path, "# Version 2\n\nUpdated content with #new-tag.\n").unwrap();
+    fs::write(
+        &file_path,
+        "# Version 2\n\nUpdated content with #new-tag.\n",
+    )
+    .unwrap();
     let changes = index.handle_event(&[file_path], ChangeKind::Changed);
     assert_eq!(changes.len(), 1);
 
@@ -399,10 +399,7 @@ fn watcher_detects_file_creation() {
         }
         for (kind, paths) in by_kind {
             let changes = watcher_index.handle_event(&paths, kind);
-            change_count_clone.fetch_add(
-                changes.len() as u32,
-                std::sync::atomic::Ordering::SeqCst,
-            );
+            change_count_clone.fetch_add(changes.len() as u32, std::sync::atomic::Ordering::SeqCst);
         }
     })
     .expect("failed to start watcher");
@@ -449,10 +446,7 @@ fn watcher_detects_file_modification() {
         }
         for (kind, paths) in by_kind {
             let changes = watcher_index.handle_event(&paths, kind);
-            change_count_clone.fetch_add(
-                changes.len() as u32,
-                std::sync::atomic::Ordering::SeqCst,
-            );
+            change_count_clone.fetch_add(changes.len() as u32, std::sync::atomic::Ordering::SeqCst);
         }
     })
     .expect("failed to start watcher");
@@ -1141,11 +1135,7 @@ fn tag_index_get_files_by_tag_case_insensitive() {
         "---\ntags: [Project]\n---\n\nText.\n",
     )
     .unwrap();
-    fs::write(
-        dir.path().join("b.md"),
-        "# Note\n\n#project content.\n",
-    )
-    .unwrap();
+    fs::write(dir.path().join("b.md"), "# Note\n\n#project content.\n").unwrap();
 
     let index = FileIndex::new(dir.path().to_path_buf());
     index.full_scan();
@@ -1279,11 +1269,7 @@ fn tag_index_app_state_integration() {
 #[test]
 fn tag_index_cleared_on_state_clear_all() {
     let dir = temp_workspace();
-    fs::write(
-        dir.path().join("a.md"),
-        "---\ntags: [test]\n---\n\nText.\n",
-    )
-    .unwrap();
+    fs::write(dir.path().join("a.md"), "---\ntags: [test]\n---\n\nText.\n").unwrap();
 
     let state = vigil_lib::state::AppState::new();
     let index = FileIndex::new(dir.path().to_path_buf());

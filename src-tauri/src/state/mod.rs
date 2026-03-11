@@ -4,6 +4,7 @@
 //! behind read-write locks so Tauri commands can access them safely from any
 //! thread.
 
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use crate::core::fs::WorkspaceFs;
@@ -14,7 +15,7 @@ use crate::core::links::LinkGraph;
 ///
 /// Commands receive `State<'_, AppState>` and use `workspace()` /
 /// `set_workspace()` to access the current workspace.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AppState {
     workspace: Arc<RwLock<Option<WorkspaceFs>>>,
     index: Arc<RwLock<Option<FileIndex>>>,
@@ -25,6 +26,9 @@ pub struct AppState {
     /// The file watcher is not `Debug`, so we wrap it separately.
     /// It is held alive as long as a workspace is open.
     watcher: Arc<RwLock<Option<WatcherHolder>>>,
+    /// Unix epoch ms of the last index update (full scan or incremental).
+    /// Updated atomically so queries never block on writes.
+    last_index_update_ms: Arc<AtomicI64>,
 }
 
 /// Wrapper to hold the `FileWatcher` which does not implement `Debug`.
@@ -38,6 +42,12 @@ impl std::fmt::Debug for WatcherHolder {
     }
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     /// Create a new empty `AppState` (no workspace open).
     pub fn new() -> Self {
@@ -47,6 +57,7 @@ impl AppState {
             link_graph: Arc::new(RwLock::new(None)),
             tag_index: Arc::new(RwLock::new(None)),
             watcher: Arc::new(RwLock::new(None)),
+            last_index_update_ms: Arc::new(AtomicI64::new(0)),
         }
     }
 
@@ -70,10 +81,7 @@ impl AppState {
     ///
     /// Returns `None` if no workspace is open or index not yet built.
     pub fn index(&self) -> Option<FileIndex> {
-        self.index
-            .read()
-            .expect("index lock poisoned")
-            .clone()
+        self.index.read().expect("index lock poisoned").clone()
     }
 
     /// Set (or replace) the current file index.
@@ -128,6 +136,26 @@ impl AppState {
         *guard = None;
     }
 
+    /// Record the timestamp of the last index update (full scan or incremental).
+    pub fn set_last_index_update_ms(&self, ms: i64) {
+        self.last_index_update_ms.store(ms, Ordering::Release);
+    }
+
+    /// Get the timestamp of the last index update.
+    ///
+    /// Returns 0 if no index update has occurred yet.
+    pub fn last_index_update_ms(&self) -> i64 {
+        self.last_index_update_ms.load(Ordering::Acquire)
+    }
+
+    /// Get a clone of the `Arc<AtomicI64>` for `last_index_update_ms`.
+    ///
+    /// Used by the file watcher callback to update the timestamp without
+    /// holding a reference to the full `AppState`.
+    pub fn last_index_update_arc(&self) -> Arc<AtomicI64> {
+        self.last_index_update_ms.clone()
+    }
+
     /// Clear all workspace state (workspace, index, watcher).
     ///
     /// Called when switching workspaces.
@@ -149,5 +177,6 @@ impl AppState {
             let mut guard = self.workspace.write().expect("workspace lock poisoned");
             *guard = None;
         }
+        self.last_index_update_ms.store(0, Ordering::Release);
     }
 }

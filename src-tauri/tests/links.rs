@@ -87,10 +87,16 @@ fn parser_preserves_link_type_distinction() {
     let links = parse_links(content, "source.md");
 
     assert_eq!(links.len(), 2);
-    let wiki = links.iter().find(|l| l.link_type == LinkType::Wikilink).unwrap();
+    let wiki = links
+        .iter()
+        .find(|l| l.link_type == LinkType::Wikilink)
+        .unwrap();
     assert_eq!(wiki.target_path, "wiki-note.md");
 
-    let md = links.iter().find(|l| l.link_type == LinkType::Markdown).unwrap();
+    let md = links
+        .iter()
+        .find(|l| l.link_type == LinkType::Markdown)
+        .unwrap();
     assert_eq!(md.target_path, "md-note.md");
 }
 
@@ -184,16 +190,8 @@ fn link_graph_includes_dangling_links() {
 fn link_graph_get_graph_returns_all_nodes_and_edges() {
     let dir = temp_workspace();
 
-    fs::write(
-        dir.path().join("a.md"),
-        "# Note A\n\nLinks to [[b]].\n",
-    )
-    .unwrap();
-    fs::write(
-        dir.path().join("b.md"),
-        "# Note B\n\nLinks to [[c]].\n",
-    )
-    .unwrap();
+    fs::write(dir.path().join("a.md"), "# Note A\n\nLinks to [[b]].\n").unwrap();
+    fs::write(dir.path().join("b.md"), "# Note B\n\nLinks to [[c]].\n").unwrap();
     fs::write(dir.path().join("c.md"), "# Note C\n\nNo links.\n").unwrap();
 
     let index = FileIndex::new(dir.path().to_path_buf());
@@ -256,11 +254,7 @@ fn link_graph_handles_empty_workspace() {
 fn link_graph_rebuild_replaces_stale_data() {
     let dir = temp_workspace();
 
-    fs::write(
-        dir.path().join("a.md"),
-        "# A\n\nLinks to [[b]].\n",
-    )
-    .unwrap();
+    fs::write(dir.path().join("a.md"), "# A\n\nLinks to [[b]].\n").unwrap();
     fs::write(dir.path().join("b.md"), "# B\n").unwrap();
 
     let index = FileIndex::new(dir.path().to_path_buf());
@@ -288,11 +282,7 @@ fn link_graph_handles_subdirectory_links() {
 
     fs::create_dir(dir.path().join("sub")).unwrap();
 
-    fs::write(
-        dir.path().join("root.md"),
-        "# Root\n\nSee [[sub/deep]].\n",
-    )
-    .unwrap();
+    fs::write(dir.path().join("root.md"), "# Root\n\nSee [[sub/deep]].\n").unwrap();
     fs::write(dir.path().join("sub/deep.md"), "# Deep\n\nContent.\n").unwrap();
 
     let index = FileIndex::new(dir.path().to_path_buf());

@@ -118,11 +118,7 @@ impl LinkGraph {
 
     /// Rebuild from parsed links directly (for testing without filesystem).
     #[cfg(test)]
-    pub fn rebuild_from_parsed(
-        &self,
-        all_links: &[ParsedLink],
-        known_notes: HashSet<String>,
-    ) {
+    pub fn rebuild_from_parsed(&self, all_links: &[ParsedLink], known_notes: HashSet<String>) {
         let mut outgoing: HashMap<String, Vec<LinkEdge>> = HashMap::new();
         let mut backlinks: HashMap<String, Vec<BacklinkRecord>> = HashMap::new();
 
@@ -164,11 +160,7 @@ impl LinkGraph {
     /// Returns an empty vec if no notes link to the target.
     pub fn get_backlinks(&self, path: &str) -> Vec<BacklinkRecord> {
         let inner = self.inner.read();
-        inner
-            .backlinks
-            .get(path)
-            .cloned()
-            .unwrap_or_default()
+        inner.backlinks.get(path).cloned().unwrap_or_default()
     }
 
     /// Get all outgoing link edges for a given workspace-relative path.
@@ -176,11 +168,7 @@ impl LinkGraph {
     /// Returns an empty vec if the note has no outgoing links.
     pub fn get_outgoing_links(&self, path: &str) -> Vec<LinkEdge> {
         let inner = self.inner.read();
-        inner
-            .outgoing
-            .get(path)
-            .cloned()
-            .unwrap_or_default()
+        inner.outgoing.get(path).cloned().unwrap_or_default()
     }
 
     /// Get the full graph for visualization.
@@ -342,8 +330,18 @@ mod tests {
     fn link_type_is_preserved() {
         let graph = LinkGraph::new();
         let links = vec![
-            make_parsed_link("a.md", "wiki-target.md", LinkType::Wikilink, "[[wiki-target]]"),
-            make_parsed_link("a.md", "md-target.md", LinkType::Markdown, "[t](md-target.md)"),
+            make_parsed_link(
+                "a.md",
+                "wiki-target.md",
+                LinkType::Wikilink,
+                "[[wiki-target]]",
+            ),
+            make_parsed_link(
+                "a.md",
+                "md-target.md",
+                LinkType::Markdown,
+                "[t](md-target.md)",
+            ),
         ];
 
         let mut known = HashSet::new();
@@ -353,10 +351,16 @@ mod tests {
         let outgoing = graph.get_outgoing_links("a.md");
         assert_eq!(outgoing.len(), 2);
 
-        let wiki = outgoing.iter().find(|e| e.kind == LinkType::Wikilink).unwrap();
+        let wiki = outgoing
+            .iter()
+            .find(|e| e.kind == LinkType::Wikilink)
+            .unwrap();
         assert_eq!(wiki.to_node_id, node_id("wiki-target.md"));
 
-        let md = outgoing.iter().find(|e| e.kind == LinkType::Markdown).unwrap();
+        let md = outgoing
+            .iter()
+            .find(|e| e.kind == LinkType::Markdown)
+            .unwrap();
         assert_eq!(md.to_node_id, node_id("md-target.md"));
     }
 

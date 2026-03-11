@@ -165,7 +165,10 @@ fn score_match(line: &str, start_col: usize, query_len: usize) -> f64 {
     // We need the original query for case comparison, but we only have the
     // length here. Use a simple heuristic: if the slice is all lowercase or
     // all uppercase, it likely matches common query patterns.
-    if original_slice.chars().all(|c| c.is_lowercase() || !c.is_alphabetic()) {
+    if original_slice
+        .chars()
+        .all(|c| c.is_lowercase() || !c.is_alphabetic())
+    {
         score += 5.0;
     }
 

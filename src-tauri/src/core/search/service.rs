@@ -101,10 +101,7 @@ impl<'a> FuzzyFinder<'a> {
         files: &[crate::models::files::FileEntry],
         limit: usize,
     ) -> Vec<FuzzyMatch> {
-        let mut entries: Vec<_> = files
-            .iter()
-            .filter(|e| e.kind == EntryKind::File)
-            .collect();
+        let mut entries: Vec<_> = files.iter().filter(|e| e.kind == EntryKind::File).collect();
 
         entries.sort_by(|a, b| b.modified_at_ms.cmp(&a.modified_at_ms));
         entries.truncate(limit);
@@ -231,11 +228,7 @@ mod tests {
     fn max_limit_is_clamped() {
         let dir = temp_workspace();
         for i in 0..5 {
-            fs::write(
-                dir.path().join(format!("f{i}.md")),
-                format!("# F{i}"),
-            )
-            .unwrap();
+            fs::write(dir.path().join(format!("f{i}.md")), format!("# F{i}")).unwrap();
         }
 
         let index = build_index(dir.path());
@@ -249,11 +242,7 @@ mod tests {
     fn path_matching_works_with_slashes() {
         let dir = temp_workspace();
         fs::create_dir_all(dir.path().join("notes/daily")).unwrap();
-        fs::write(
-            dir.path().join("notes/daily/today.md"),
-            "# Today",
-        )
-        .unwrap();
+        fs::write(dir.path().join("notes/daily/today.md"), "# Today").unwrap();
         fs::write(dir.path().join("readme.md"), "# Readme").unwrap();
 
         let index = build_index(dir.path());

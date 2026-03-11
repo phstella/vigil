@@ -72,12 +72,18 @@ fn workflow_open_index_fuzzy_find() {
 
     // Verify scan found all files (5 files across root + notes/)
     assert_eq!(scan.files_count, 5, "should index all 5 files");
-    assert!(scan.notes_count >= 4, "should find at least 4 markdown notes");
+    assert!(
+        scan.notes_count >= 4,
+        "should find at least 4 markdown notes"
+    );
 
     // Fuzzy find: search for "arch" should match architecture.md
     let finder = FuzzyFinder::new(&index);
     let results = finder.fuzzy_find("arch", 10);
-    assert!(!results.is_empty(), "fuzzy find should return results for 'arch'");
+    assert!(
+        !results.is_empty(),
+        "fuzzy find should return results for 'arch'"
+    );
     let paths: Vec<&str> = results.iter().map(|m| m.path.as_str()).collect();
     assert!(
         paths.contains(&"architecture.md"),
@@ -139,7 +145,10 @@ fn workflow_write_file_incremental_index_search() {
     // Content search should find the new file
     let searcher = ContentSearcher::new(&index);
     let results = searcher.search_content("quantum computing", dir.path(), 50);
-    assert!(!results.is_empty(), "content search should find 'quantum computing'");
+    assert!(
+        !results.is_empty(),
+        "content search should find 'quantum computing'"
+    );
     assert_eq!(results[0].path, "new-topic.md");
 
     // Fuzzy find should also find it
@@ -186,10 +195,7 @@ fn workflow_tag_index_correct_counts() {
 
     // "guide" appears in getting-started.md and architecture.md
     let guide_tag = all_tags.iter().find(|t| t.name == "guide").unwrap();
-    assert_eq!(
-        guide_tag.count, 2,
-        "'guide' tag should appear in 2 files"
-    );
+    assert_eq!(guide_tag.count, 2, "'guide' tag should appear in 2 files");
 
     // "backend" appears in architecture.md and daily-2024-01-15.md
     let backend_tag = all_tags.iter().find(|t| t.name == "backend").unwrap();
@@ -238,7 +244,10 @@ fn workflow_link_graph_backlinks_resolve() {
         "getting-started should have at least 2 backlinks, got {}",
         gs_backlinks.len()
     );
-    let sources: Vec<&str> = gs_backlinks.iter().map(|b| b.source_path.as_str()).collect();
+    let sources: Vec<&str> = gs_backlinks
+        .iter()
+        .map(|b| b.source_path.as_str())
+        .collect();
     assert!(
         sources.contains(&"readme.md"),
         "readme.md should link to getting-started, sources: {sources:?}"
@@ -255,7 +264,10 @@ fn workflow_link_graph_backlinks_resolve() {
         "architecture should have at least 2 backlinks, got {}",
         arch_backlinks.len()
     );
-    let sources: Vec<&str> = arch_backlinks.iter().map(|b| b.source_path.as_str()).collect();
+    let sources: Vec<&str> = arch_backlinks
+        .iter()
+        .map(|b| b.source_path.as_str())
+        .collect();
     assert!(
         sources.contains(&"getting-started.md"),
         "getting-started should link to architecture, sources: {sources:?}"
@@ -267,10 +279,7 @@ fn workflow_link_graph_backlinks_resolve() {
 
     // Verify outgoing links
     let readme_out = graph.get_outgoing_links("readme.md");
-    assert!(
-        !readme_out.is_empty(),
-        "readme should have outgoing links"
-    );
+    assert!(!readme_out.is_empty(), "readme should have outgoing links");
 
     // Verify graph visualization includes all notes
     let note_graph = graph.get_graph(&index);
@@ -279,10 +288,7 @@ fn workflow_link_graph_backlinks_resolve() {
         "graph should have at least 4 nodes (the 4 md files), got {}",
         note_graph.nodes.len()
     );
-    assert!(
-        !note_graph.edges.is_empty(),
-        "graph should have edges"
-    );
+    assert!(!note_graph.edges.is_empty(), "graph should have edges");
 }
 
 // ---------------------------------------------------------------------------
@@ -305,10 +311,7 @@ fn workflow_workspace_status_assembly() {
     tag_index.rebuild(&index);
 
     // Collect metrics (simulates what workspace_status command does)
-    let metrics = vigil_lib::core::index::metrics::collect_metrics(
-        Some(&index),
-        Some(&tag_index),
-    );
+    let metrics = vigil_lib::core::index::metrics::collect_metrics(Some(&index), Some(&tag_index));
 
     assert!(metrics.files_count > 0, "should have files");
     assert!(metrics.notes_count > 0, "should have notes");
@@ -316,10 +319,7 @@ fn workflow_workspace_status_assembly() {
 
     // Verify concrete values match what we set up
     assert_eq!(metrics.files_count, 5, "5 files in workspace");
-    assert!(
-        metrics.notes_count >= 4,
-        "at least 4 markdown notes"
-    );
+    assert!(metrics.notes_count >= 4, "at least 4 markdown notes");
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +429,10 @@ fn workflow_tag_link_coherence_after_edit() {
 
     // Link graph should reflect the edit: architecture now links to readme
     let arch_outgoing = graph.get_outgoing_links("architecture.md");
-    assert!(!arch_outgoing.is_empty(), "should have outgoing links after edit");
+    assert!(
+        !arch_outgoing.is_empty(),
+        "should have outgoing links after edit"
+    );
     let readme_backlinks = graph.get_backlinks("readme.md");
     let has_arch_backlink = readme_backlinks
         .iter()
@@ -512,11 +515,7 @@ fn workflow_git_status_after_workspace_changes() {
 
     // Create initial content and commit
     fs::write(dir.path().join("readme.md"), "# Readme\n").unwrap();
-    fs::write(
-        dir.path().join("notes.md"),
-        "# Notes\n\nInitial content.\n",
-    )
-    .unwrap();
+    fs::write(dir.path().join("notes.md"), "# Notes\n\nInitial content.\n").unwrap();
     stage_and_commit(&repo, "initial commit");
 
     // Open workspace and build index
@@ -546,7 +545,10 @@ fn workflow_git_status_after_workspace_changes() {
 
     // Hunks should be non-empty for the modified file
     let hunks = git_svc.get_hunks("notes.md").unwrap();
-    assert!(!hunks.hunks.is_empty(), "should have hunks for modified file");
+    assert!(
+        !hunks.hunks.is_empty(),
+        "should have hunks for modified file"
+    );
 
     // Index should also pick up the change
     let file_path = dir.path().join("notes.md");

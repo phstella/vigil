@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { AppShell, TitleBar, WorkspaceGrid } from '$lib/components/layout';
+	import { AppShell, Sidebar, TitleBar, WorkspaceGrid } from '$lib/components/layout';
+	import { PrimaryRail } from '$lib/components/chrome';
+	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
+
+	let activeSection: Section | null = $state(null);
+	let sidebarOpen = $derived(activeSection !== null);
+
+	function handleSectionChange(section: Section | null) {
+		activeSection = section;
+	}
 </script>
 
 <svelte:head>
@@ -13,6 +22,14 @@
 	{/snippet}
 
 	<WorkspaceGrid>
+		{#snippet activityRail()}
+			<PrimaryRail {activeSection} onSectionChange={handleSectionChange} />
+		{/snippet}
+
+		{#snippet sidebar()}
+			<Sidebar isOpen={sidebarOpen} {activeSection} />
+		{/snippet}
+
 		<div class="flex flex-1 items-center justify-center">
 			<div class="text-center">
 				<h1 class="text-2xl font-semibold text-text-primary">Vigil</h1>

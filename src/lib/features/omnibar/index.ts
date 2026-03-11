@@ -1,2 +1,5 @@
 // Barrel file for omnibar feature.
-// Re-export omnibar feature components and logic as they are created.
+export { default as Omnibar } from './Omnibar.svelte';
+export { default as OmnibarItem } from './OmnibarItem.svelte';
+export { omnibarStore } from './omnibar-store';
+export type { OmnibarResult } from './omnibar-store';

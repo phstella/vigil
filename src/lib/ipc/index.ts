@@ -1,2 +1,29 @@
 // Barrel file for Tauri IPC wrappers.
-// Re-export typed invoke/listen wrappers as they are created.
+
+export { isVigilError } from './tauri';
+
+export {
+	openWorkspace,
+	listDir,
+	readFile,
+	writeFile,
+	createNote,
+	renameFile,
+	deleteFile
+} from './files';
+
+export { fuzzyFind, searchContent, getAllTags, getFilesByTag } from './search';
+
+export { getGitHunks, getGitStatus } from './git';
+
+export { getBacklinks } from './links';
+
+export { workspaceStatus } from './status';
+
+export {
+	EVENTS,
+	onIndexUpdated,
+	onIndexReady,
+	onGitHunks,
+	onStatusUpdated
+} from './events';

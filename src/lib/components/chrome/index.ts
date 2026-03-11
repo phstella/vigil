@@ -1,2 +1,2 @@
 // Barrel file for chrome components.
-// Re-export chrome/shell components as they are created.
+export { default as PrimaryRail } from './PrimaryRail.svelte';

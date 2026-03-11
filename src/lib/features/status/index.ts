@@ -1,2 +1,3 @@
 // Barrel file for status feature.
-// Re-export status feature components and logic as they are created.
+export { default as StatusBar } from './StatusBar.svelte';
+export { statusStore } from './status-store';

@@ -1,11 +1,13 @@
 //! Managed application state for Tauri.
 //!
-//! `AppState` holds the current workspace filesystem service behind a
-//! read-write lock so Tauri commands can access it safely from any thread.
+//! `AppState` holds the current workspace filesystem service and file index
+//! behind read-write locks so Tauri commands can access them safely from any
+//! thread.
 
 use std::sync::{Arc, RwLock};
 
 use crate::core::fs::WorkspaceFs;
+use crate::core::index::{FileIndex, FileWatcher};
 
 /// Application state managed by Tauri's `State<>` extractor.
 ///
@@ -14,6 +16,21 @@ use crate::core::fs::WorkspaceFs;
 #[derive(Debug, Default)]
 pub struct AppState {
     workspace: Arc<RwLock<Option<WorkspaceFs>>>,
+    index: Arc<RwLock<Option<FileIndex>>>,
+    /// The file watcher is not `Debug`, so we wrap it separately.
+    /// It is held alive as long as a workspace is open.
+    watcher: Arc<RwLock<Option<WatcherHolder>>>,
+}
+
+/// Wrapper to hold the `FileWatcher` which does not implement `Debug`.
+struct WatcherHolder {
+    _watcher: FileWatcher,
+}
+
+impl std::fmt::Debug for WatcherHolder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WatcherHolder").finish()
+    }
 }
 
 impl AppState {
@@ -21,6 +38,8 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             workspace: Arc::new(RwLock::new(None)),
+            index: Arc::new(RwLock::new(None)),
+            watcher: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -38,5 +57,50 @@ impl AppState {
     pub fn set_workspace(&self, ws: WorkspaceFs) {
         let mut guard = self.workspace.write().expect("workspace lock poisoned");
         *guard = Some(ws);
+    }
+
+    /// Get a clone of the current file index.
+    ///
+    /// Returns `None` if no workspace is open or index not yet built.
+    pub fn index(&self) -> Option<FileIndex> {
+        self.index
+            .read()
+            .expect("index lock poisoned")
+            .clone()
+    }
+
+    /// Set (or replace) the current file index.
+    pub fn set_index(&self, index: FileIndex) {
+        let mut guard = self.index.write().expect("index lock poisoned");
+        *guard = Some(index);
+    }
+
+    /// Set the file watcher for the current workspace.
+    ///
+    /// The previous watcher (if any) is dropped, which signals it to stop.
+    pub fn set_watcher(&self, watcher: FileWatcher) {
+        let mut guard = self.watcher.write().expect("watcher lock poisoned");
+        *guard = Some(WatcherHolder { _watcher: watcher });
+    }
+
+    /// Stop and remove the current file watcher.
+    pub fn clear_watcher(&self) {
+        let mut guard = self.watcher.write().expect("watcher lock poisoned");
+        *guard = None;
+    }
+
+    /// Clear all workspace state (workspace, index, watcher).
+    ///
+    /// Called when switching workspaces.
+    pub fn clear_all(&self) {
+        self.clear_watcher();
+        {
+            let mut guard = self.index.write().expect("index lock poisoned");
+            *guard = None;
+        }
+        {
+            let mut guard = self.workspace.write().expect("workspace lock poisoned");
+            *guard = None;
+        }
     }
 }

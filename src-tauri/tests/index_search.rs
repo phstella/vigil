@@ -1,0 +1,620 @@
+//! Integration tests for the file index and watcher.
+//!
+//! These tests exercise `FileIndex` directly (not via Tauri IPC) to validate
+//! full scan, incremental updates, metadata extraction, and watcher behavior.
+
+use std::fs;
+use std::thread;
+use std::time::Duration;
+
+use vigil_lib::core::index::{ChangeKind, FileIndex, FileWatcher};
+
+/// Create a temporary workspace directory.
+fn temp_workspace() -> tempfile::TempDir {
+    tempfile::tempdir().expect("failed to create temp dir")
+}
+
+// ---------------------------------------------------------------------------
+// Full scan
+// ---------------------------------------------------------------------------
+
+#[test]
+fn full_scan_empty_workspace() {
+    let dir = temp_workspace();
+    let index = FileIndex::new(dir.path().to_path_buf());
+    let result = index.full_scan();
+
+    assert_eq!(result.files_count, 0);
+    assert_eq!(result.notes_count, 0);
+    assert!(!index.is_populated());
+}
+
+#[test]
+fn full_scan_with_files_and_notes() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("readme.md"), "# Readme\n\nHello.").unwrap();
+    fs::write(dir.path().join("config.txt"), "key=value").unwrap();
+    fs::create_dir(dir.path().join("notes")).unwrap();
+    fs::write(
+        dir.path().join("notes/daily.md"),
+        "# Daily\n\nSome notes.",
+    )
+    .unwrap();
+    fs::write(dir.path().join("notes/todo.md"), "# Todo\n\n- item 1").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    let result = index.full_scan();
+
+    assert_eq!(result.files_count, 4); // readme.md, config.txt, daily.md, todo.md
+    assert_eq!(result.notes_count, 3); // readme.md, daily.md, todo.md
+    assert!(index.is_populated());
+}
+
+#[test]
+fn full_scan_skips_git_directory() {
+    let dir = temp_workspace();
+    fs::create_dir(dir.path().join(".git")).unwrap();
+    fs::write(dir.path().join(".git/config"), "[core]").unwrap();
+    fs::write(dir.path().join("note.md"), "# Note").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    assert!(index.get_file_entry("note.md").is_some());
+    assert!(index.get_file_entry(".git/config").is_none());
+}
+
+#[test]
+fn full_scan_indexes_hidden_files() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join(".hidden.md"), "# Hidden").unwrap();
+    fs::write(dir.path().join("visible.md"), "# Visible").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let hidden = index.get_file_entry(".hidden.md").unwrap();
+    assert!(hidden.is_hidden);
+
+    let visible = index.get_file_entry("visible.md").unwrap();
+    assert!(!visible.is_hidden);
+}
+
+#[test]
+fn full_scan_detects_binary_files() {
+    let dir = temp_workspace();
+    let mut binary_content = vec![0u8; 100];
+    binary_content[0] = b'P';
+    binary_content[1] = b'K';
+    binary_content[50] = 0; // null byte
+    fs::write(dir.path().join("archive.zip"), &binary_content).unwrap();
+    fs::write(dir.path().join("text.md"), "Hello").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let binary = index.get_file_entry("archive.zip").unwrap();
+    assert!(binary.is_binary);
+
+    let text = index.get_file_entry("text.md").unwrap();
+    assert!(!text.is_binary);
+}
+
+#[test]
+fn full_scan_respects_ignore_rules() {
+    let dir = temp_workspace();
+    // The ignore crate always respects .ignore files.
+    fs::write(dir.path().join(".ignore"), "build/\n*.tmp\n").unwrap();
+    fs::write(dir.path().join("kept.md"), "# Kept").unwrap();
+    fs::write(dir.path().join("scratch.tmp"), "temp").unwrap();
+    fs::create_dir(dir.path().join("build")).unwrap();
+    fs::write(dir.path().join("build/output.js"), "// built").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    assert!(index.get_file_entry("kept.md").is_some());
+    assert!(index.get_file_entry("scratch.tmp").is_none());
+    assert!(index.get_file_entry("build/output.js").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Note metadata extraction
+// ---------------------------------------------------------------------------
+
+#[test]
+fn note_metadata_with_frontmatter_title_and_tags() {
+    let dir = temp_workspace();
+    let content = "\
+---
+title: My Project
+tags: [design, mvp]
+---
+
+# Heading ignored when frontmatter title exists
+
+Body text with #inline-tag and more words.
+";
+    fs::write(dir.path().join("project.md"), content).unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let meta = index.get_note_metadata("project.md").unwrap();
+    assert_eq!(meta.title, "My Project");
+    assert!(meta.has_frontmatter);
+    assert!(meta.tags.contains(&"design".to_string()));
+    assert!(meta.tags.contains(&"mvp".to_string()));
+    assert!(meta.tags.contains(&"inline-tag".to_string()));
+    assert!(meta.word_count > 0);
+}
+
+#[test]
+fn note_metadata_heading_fallback() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "# My Heading\n\nBody here.\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let meta = index.get_note_metadata("note.md").unwrap();
+    assert_eq!(meta.title, "My Heading");
+    assert!(!meta.has_frontmatter);
+}
+
+#[test]
+fn note_metadata_filename_fallback() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("plain-note.md"), "Just body text.\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let meta = index.get_note_metadata("plain-note.md").unwrap();
+    assert_eq!(meta.title, "plain-note");
+}
+
+#[test]
+fn note_metadata_extracts_wikilinks() {
+    let dir = temp_workspace();
+    let content = "# Note\n\nSee [[other-note]] and [[folder/deep|alias]].\n";
+    fs::write(dir.path().join("linked.md"), content).unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let meta = index.get_note_metadata("linked.md").unwrap();
+    assert!(meta.links_out.contains(&"other-note.md".to_string()));
+    assert!(meta.links_out.contains(&"folder/deep.md".to_string()));
+}
+
+#[test]
+fn note_metadata_extracts_markdown_links() {
+    let dir = temp_workspace();
+    let content = "# Note\n\nSee [reference](docs/ref.md) and [ext](https://example.com).\n";
+    fs::write(dir.path().join("linked.md"), content).unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let meta = index.get_note_metadata("linked.md").unwrap();
+    assert!(meta.links_out.contains(&"docs/ref.md".to_string()));
+    // External URLs should not be included.
+    assert!(!meta.links_out.iter().any(|l| l.contains("example.com")));
+}
+
+// ---------------------------------------------------------------------------
+// Tag queries
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tag_count_across_notes() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("a.md"),
+        "---\ntags: [alpha, beta]\n---\n\nText.\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("b.md"),
+        "---\ntags: [beta, gamma]\n---\n\nMore text.\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    // Unique tags: alpha, beta, gamma = 3
+    assert_eq!(index.get_tag_count(), 3);
+
+    let tags = index.get_all_tags();
+    assert_eq!(*tags.get("beta").unwrap(), 2);
+    assert_eq!(*tags.get("alpha").unwrap(), 1);
+    assert_eq!(*tags.get("gamma").unwrap(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Incremental updates
+// ---------------------------------------------------------------------------
+
+#[test]
+fn incremental_create_updates_index() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("existing.md"), "# Existing").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    assert_eq!(index.get_file_count(), 1);
+    assert_eq!(index.get_note_count(), 1);
+
+    // Create a new file on disk.
+    let new_path = dir.path().join("added.md");
+    fs::write(&new_path, "# Added Note\n\nWith #some-tag.\n").unwrap();
+
+    let changes = index.handle_event(&[new_path], ChangeKind::Created);
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].path, "added.md");
+    assert_eq!(changes[0].change_kind, ChangeKind::Created);
+
+    assert_eq!(index.get_file_count(), 2);
+    assert_eq!(index.get_note_count(), 2);
+
+    let meta = index.get_note_metadata("added.md").unwrap();
+    assert_eq!(meta.title, "Added Note");
+    assert!(meta.tags.contains(&"some-tag".to_string()));
+}
+
+#[test]
+fn incremental_modify_updates_metadata() {
+    let dir = temp_workspace();
+    let file_path = dir.path().join("note.md");
+    fs::write(&file_path, "# Version 1\n\nOriginal content.\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let meta = index.get_note_metadata("note.md").unwrap();
+    assert_eq!(meta.title, "Version 1");
+
+    // Modify the file.
+    fs::write(&file_path, "# Version 2\n\nUpdated content with #new-tag.\n").unwrap();
+    let changes = index.handle_event(&[file_path], ChangeKind::Changed);
+    assert_eq!(changes.len(), 1);
+
+    let meta = index.get_note_metadata("note.md").unwrap();
+    assert_eq!(meta.title, "Version 2");
+    assert!(meta.tags.contains(&"new-tag".to_string()));
+}
+
+#[test]
+fn incremental_delete_removes_from_index() {
+    let dir = temp_workspace();
+    let file_path = dir.path().join("doomed.md");
+    fs::write(&file_path, "# Doomed").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    assert_eq!(index.get_file_count(), 1);
+
+    fs::remove_file(&file_path).unwrap();
+    let changes = index.handle_event(&[file_path], ChangeKind::Deleted);
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].change_kind, ChangeKind::Deleted);
+
+    assert_eq!(index.get_file_count(), 0);
+    assert_eq!(index.get_note_count(), 0);
+}
+
+#[test]
+fn incremental_skips_git_paths() {
+    let dir = temp_workspace();
+    fs::create_dir(dir.path().join(".git")).unwrap();
+    fs::write(dir.path().join(".git/config"), "[core]").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let git_path = dir.path().join(".git/config");
+    let changes = index.handle_event(&[git_path], ChangeKind::Changed);
+    assert!(changes.is_empty());
+}
+
+#[test]
+fn incremental_handles_multiple_paths() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("a.md"), "# A").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    assert_eq!(index.get_file_count(), 1);
+
+    // Create two new files and report them in one event.
+    let b_path = dir.path().join("b.md");
+    let c_path = dir.path().join("c.txt");
+    fs::write(&b_path, "# B").unwrap();
+    fs::write(&c_path, "plain text").unwrap();
+
+    let changes = index.handle_event(&[b_path, c_path], ChangeKind::Created);
+    assert_eq!(changes.len(), 2);
+    assert_eq!(index.get_file_count(), 3);
+    assert_eq!(index.get_note_count(), 2); // a.md and b.md
+}
+
+// ---------------------------------------------------------------------------
+// FileIndex thread safety
+// ---------------------------------------------------------------------------
+
+#[test]
+fn file_index_is_thread_safe() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("a.md"), "# Alpha").unwrap();
+    fs::write(dir.path().join("b.md"), "# Beta").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    // Clone and access from multiple threads.
+    let index_clone = index.clone();
+    let handle = thread::spawn(move || {
+        assert_eq!(index_clone.get_file_count(), 2);
+        assert_eq!(index_clone.get_note_count(), 2);
+        index_clone.get_all_files()
+    });
+
+    // Concurrent read from main thread.
+    assert_eq!(index.get_note_count(), 2);
+
+    let files = handle.join().unwrap();
+    assert_eq!(files.len(), 2);
+}
+
+// ---------------------------------------------------------------------------
+// File watcher integration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn watcher_detects_file_creation() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("initial.md"), "# Initial").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    assert_eq!(index.get_file_count(), 1);
+
+    // Track changes via a shared counter.
+    let change_count = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let change_count_clone = change_count.clone();
+
+    let watcher_index = index.clone();
+    let watcher = FileWatcher::start(dir.path(), move |events| {
+        let mut by_kind = std::collections::HashMap::new();
+        for event in events {
+            by_kind
+                .entry(event.kind)
+                .or_insert_with(Vec::new)
+                .push(event.path);
+        }
+        for (kind, paths) in by_kind {
+            let changes = watcher_index.handle_event(&paths, kind);
+            change_count_clone.fetch_add(
+                changes.len() as u32,
+                std::sync::atomic::Ordering::SeqCst,
+            );
+        }
+    })
+    .expect("failed to start watcher");
+
+    // Give the watcher time to start.
+    thread::sleep(Duration::from_millis(100));
+
+    // Create a new file.
+    fs::write(dir.path().join("watched.md"), "# Watched").unwrap();
+
+    // Wait for debounce + processing.
+    thread::sleep(Duration::from_millis(500));
+
+    // The watcher should have detected the new file.
+    assert!(
+        index.get_file_count() >= 2,
+        "expected at least 2 files, got {}",
+        index.get_file_count()
+    );
+
+    watcher.stop();
+}
+
+#[test]
+fn watcher_detects_file_modification() {
+    let dir = temp_workspace();
+    let file_path = dir.path().join("note.md");
+    fs::write(&file_path, "# Original").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let change_count = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let change_count_clone = change_count.clone();
+
+    let watcher_index = index.clone();
+    let watcher = FileWatcher::start(dir.path(), move |events| {
+        let mut by_kind = std::collections::HashMap::new();
+        for event in events {
+            by_kind
+                .entry(event.kind)
+                .or_insert_with(Vec::new)
+                .push(event.path);
+        }
+        for (kind, paths) in by_kind {
+            let changes = watcher_index.handle_event(&paths, kind);
+            change_count_clone.fetch_add(
+                changes.len() as u32,
+                std::sync::atomic::Ordering::SeqCst,
+            );
+        }
+    })
+    .expect("failed to start watcher");
+
+    thread::sleep(Duration::from_millis(100));
+
+    // Modify the file.
+    fs::write(&file_path, "# Modified Title\n\nNew content.\n").unwrap();
+
+    thread::sleep(Duration::from_millis(500));
+
+    let meta = index.get_note_metadata("note.md").unwrap();
+    assert_eq!(meta.title, "Modified Title");
+
+    watcher.stop();
+}
+
+#[test]
+fn watcher_detects_file_deletion() {
+    let dir = temp_workspace();
+    let file_path = dir.path().join("to-delete.md");
+    fs::write(&file_path, "# To Delete").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    assert_eq!(index.get_file_count(), 1);
+
+    let watcher_index = index.clone();
+    let watcher = FileWatcher::start(dir.path(), move |events| {
+        let mut by_kind = std::collections::HashMap::new();
+        for event in events {
+            by_kind
+                .entry(event.kind)
+                .or_insert_with(Vec::new)
+                .push(event.path);
+        }
+        for (kind, paths) in by_kind {
+            watcher_index.handle_event(&paths, kind);
+        }
+    })
+    .expect("failed to start watcher");
+
+    thread::sleep(Duration::from_millis(100));
+
+    // Delete the file.
+    fs::remove_file(&file_path).unwrap();
+
+    thread::sleep(Duration::from_millis(500));
+
+    assert_eq!(index.get_file_count(), 0);
+
+    watcher.stop();
+}
+
+// ---------------------------------------------------------------------------
+// AppState integration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn app_state_holds_index() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "# Note").unwrap();
+
+    let state = vigil_lib::state::AppState::new();
+    assert!(state.index().is_none());
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    state.set_index(index);
+
+    let retrieved = state.index().unwrap();
+    assert_eq!(retrieved.get_file_count(), 1);
+    assert_eq!(retrieved.get_note_count(), 1);
+}
+
+#[test]
+fn app_state_clear_all_resets_everything() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "# Note").unwrap();
+
+    let state = vigil_lib::state::AppState::new();
+
+    let (ws, _) = vigil_lib::core::fs::WorkspaceFs::open(dir.path().to_str().unwrap()).unwrap();
+    state.set_workspace(ws);
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    state.set_index(index);
+
+    assert!(state.workspace().is_some());
+    assert!(state.index().is_some());
+
+    state.clear_all();
+
+    assert!(state.workspace().is_none());
+    assert!(state.index().is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Query methods
+// ---------------------------------------------------------------------------
+
+#[test]
+fn get_all_files_returns_complete_list() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("a.md"), "# A").unwrap();
+    fs::write(dir.path().join("b.txt"), "text").unwrap();
+    fs::create_dir(dir.path().join("sub")).unwrap();
+    fs::write(dir.path().join("sub/c.md"), "# C").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let all = index.get_all_files();
+    let paths: Vec<&str> = all.iter().map(|f| f.path.as_str()).collect();
+    assert!(paths.contains(&"a.md"));
+    assert!(paths.contains(&"b.txt"));
+    assert!(paths.contains(&"sub/c.md"));
+}
+
+#[test]
+fn get_all_notes_returns_only_markdown() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "# Note").unwrap();
+    fs::write(dir.path().join("config.txt"), "key=val").unwrap();
+    fs::write(dir.path().join("data.json"), "{}").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let notes = index.get_all_notes();
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].path, "note.md");
+}
+
+#[test]
+fn get_file_entry_nonexistent_returns_none() {
+    let dir = temp_workspace();
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    assert!(index.get_file_entry("nonexistent.md").is_none());
+    assert!(index.get_note_metadata("nonexistent.md").is_none());
+}
+
+// ---------------------------------------------------------------------------
+// Scan result timing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn scan_result_has_valid_duration() {
+    let dir = temp_workspace();
+    for i in 0..50 {
+        fs::write(
+            dir.path().join(format!("note-{i}.md")),
+            format!("# Note {i}\n\nContent for note {i}."),
+        )
+        .unwrap();
+    }
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    let result = index.full_scan();
+
+    assert_eq!(result.files_count, 50);
+    assert_eq!(result.notes_count, 50);
+    // Duration should be reasonable (< 5 seconds for 50 files).
+    assert!(result.duration_ms < 5000);
+}

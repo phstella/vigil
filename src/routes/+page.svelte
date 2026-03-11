@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
 	import { AppShell, Sidebar, TitleBar, WorkspaceGrid } from '$lib/components/layout';
 	import { PrimaryRail } from '$lib/components/chrome';
 	import { EditorRouter } from '$lib/features/editor';
@@ -6,6 +7,9 @@
 	import { StatusBar } from '$lib/features/status';
 	import { editorStore } from '$lib/stores/editor';
 	import { uiStore } from '$lib/stores/ui';
+	import { shortcutRegistry } from '$lib/utils';
+	import { noteStore } from '$lib/features/editor/note-store';
+	import { codeStore } from '$lib/features/editor/code-store';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
 	import type { EditorState, UiState } from '$lib/types/store';
 
@@ -51,6 +55,41 @@
 		// TODO: Wire to editor open flow once IPC is available.
 		console.log('[omnibar] selected:', path);
 	}
+
+	/** Placeholder save action -- logs and clears dirty state. */
+	function saveCurrentFile() {
+		if (noteStore.isDirty) {
+			console.log('[shortcut] save note:', noteStore.filePath);
+			noteStore.markClean();
+			return;
+		}
+		if (codeStore.isDirty) {
+			console.log('[shortcut] save code:', codeStore.filePath);
+			codeStore.markClean();
+			return;
+		}
+		console.log('[shortcut] save: nothing to save');
+	}
+
+	/** Placeholder new note action. */
+	function createNewNote() {
+		// TODO: Wire to create_note IPC command once available.
+		console.log('[shortcut] create new note');
+	}
+
+	onMount(() => {
+		shortcutRegistry.register('ctrl+p', () => uiStore.toggleOmnibar(), { global: true });
+		shortcutRegistry.register('ctrl+s', saveCurrentFile);
+		shortcutRegistry.register('ctrl+b', () => uiStore.toggleSidebar());
+		shortcutRegistry.register('ctrl+n', createNewNote);
+	});
+
+	onDestroy(() => {
+		shortcutRegistry.unregister('ctrl+p');
+		shortcutRegistry.unregister('ctrl+s');
+		shortcutRegistry.unregister('ctrl+b');
+		shortcutRegistry.unregister('ctrl+n');
+	});
 </script>
 
 <svelte:head>
@@ -90,18 +129,7 @@
 	</WorkspaceGrid>
 
 	{#snippet statusbar()}
-		<div class="relative">
-			<StatusBar />
-			<!-- Temporary toggle: will be replaced by Ctrl+P shortcut in ticket 2.12 -->
-			<button
-				class="absolute right-20 top-0 z-raised flex h-6 items-center px-2 text-xs text-text-muted transition-colors hover:text-accent"
-				onclick={() => uiStore.toggleOmnibar()}
-				type="button"
-				aria-label="Toggle omnibar"
-			>
-				Ctrl+P
-			</button>
-		</div>
+		<StatusBar />
 	{/snippet}
 </AppShell>
 

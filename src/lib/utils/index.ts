@@ -1,2 +1,3 @@
 // Barrel file for shared utilities.
-// Re-export utility functions as they are created.
+export { shortcutRegistry } from './shortcuts';
+export type { ShortcutEntry, ShortcutRegistry } from './shortcuts';

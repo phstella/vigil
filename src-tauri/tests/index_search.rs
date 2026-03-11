@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 use vigil_lib::core::content::ContentSearcher;
-use vigil_lib::core::index::{ChangeKind, FileIndex, FileWatcher};
+use vigil_lib::core::index::{ChangeKind, FileIndex, FileWatcher, TagIndex};
 use vigil_lib::core::search::FuzzyFinder;
 use vigil_lib::models::files::EntryKind;
 
@@ -1065,4 +1065,267 @@ fn content_search_performance_1k_files() {
         "content search took {}ms, expected < 5000ms for 1K files in debug mode",
         elapsed.as_millis()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Tag index integration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tag_index_rebuild_from_file_index() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("a.md"),
+        "---\ntags: [alpha, beta]\n---\n\nText.\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("b.md"),
+        "---\ntags: [beta, gamma]\n---\n\nMore text.\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+
+    let all_tags = tag_index.get_all_tags();
+    assert_eq!(all_tags.len(), 3);
+
+    // beta has the highest count
+    assert_eq!(all_tags[0].name, "beta");
+    assert_eq!(all_tags[0].count, 2);
+    assert_eq!(all_tags[0].files.len(), 2);
+
+    // alpha and gamma have count 1
+    let single_tags: Vec<&str> = all_tags[1..].iter().map(|t| t.name.as_str()).collect();
+    assert!(single_tags.contains(&"alpha"));
+    assert!(single_tags.contains(&"gamma"));
+}
+
+#[test]
+fn tag_index_get_file_tags() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("note.md"),
+        "---\ntags: [zebra, alpha]\n---\n\nBody #middle content.\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+
+    let tags = tag_index.get_file_tags("note.md");
+    assert_eq!(tags.len(), 3);
+    assert!(tags.contains(&"alpha".to_string()));
+    assert!(tags.contains(&"middle".to_string()));
+    assert!(tags.contains(&"zebra".to_string()));
+    // Verify sorted
+    assert_eq!(tags, {
+        let mut sorted = tags.clone();
+        sorted.sort();
+        sorted
+    });
+}
+
+#[test]
+fn tag_index_get_files_by_tag_case_insensitive() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("a.md"),
+        "---\ntags: [Project]\n---\n\nText.\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("b.md"),
+        "# Note\n\n#project content.\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+
+    // All case variants should return the same results
+    let files_lower = tag_index.get_files_by_tag("project");
+    let files_upper = tag_index.get_files_by_tag("PROJECT");
+    let files_mixed = tag_index.get_files_by_tag("Project");
+
+    assert_eq!(files_lower.len(), 2);
+    assert_eq!(files_lower, files_upper);
+    assert_eq!(files_lower, files_mixed);
+}
+
+#[test]
+fn tag_index_nonexistent_tag_returns_empty() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("a.md"), "# Note\n\nText.\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+
+    assert!(tag_index.get_files_by_tag("nonexistent").is_empty());
+    assert!(tag_index.get_file_tags("nonexistent.md").is_empty());
+}
+
+#[test]
+fn tag_index_excludes_code_block_tags() {
+    let dir = temp_workspace();
+    let content = "# Note\n\nReal #valid-tag here.\n\n```\n#code-tag\n```\n";
+    fs::write(dir.path().join("note.md"), content).unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+
+    let tags = tag_index.get_file_tags("note.md");
+    assert!(tags.contains(&"valid-tag".to_string()));
+    assert!(
+        !tags.contains(&"code-tag".to_string()),
+        "tags inside code blocks should not be indexed"
+    );
+}
+
+#[test]
+fn tag_index_rebuild_clears_stale_data() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("note.md"),
+        "---\ntags: [old-tag]\n---\n\nText.\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+    assert_eq!(tag_index.get_files_by_tag("old-tag").len(), 1);
+
+    // Modify file and rescan
+    fs::write(
+        dir.path().join("note.md"),
+        "---\ntags: [new-tag]\n---\n\nText.\n",
+    )
+    .unwrap();
+    index.full_scan();
+    tag_index.rebuild(&index);
+
+    assert!(tag_index.get_files_by_tag("old-tag").is_empty());
+    assert_eq!(tag_index.get_files_by_tag("new-tag").len(), 1);
+}
+
+#[test]
+fn tag_index_with_inline_tags() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("note.md"),
+        "# My Note\n\nSome text #first-tag and #second_tag.\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+
+    let tags = tag_index.get_file_tags("note.md");
+    assert!(tags.contains(&"first-tag".to_string()));
+    assert!(tags.contains(&"second_tag".to_string()));
+
+    let files = tag_index.get_files_by_tag("first-tag");
+    assert_eq!(files, vec!["note.md"]);
+}
+
+#[test]
+fn tag_index_app_state_integration() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("a.md"),
+        "---\ntags: [testing]\n---\n\nText.\n",
+    )
+    .unwrap();
+
+    let state = vigil_lib::state::AppState::new();
+    assert!(state.tag_index().is_none());
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    state.set_index(index.clone());
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+    state.set_tag_index(tag_index);
+
+    let retrieved = state.tag_index().unwrap();
+    let all_tags = retrieved.get_all_tags();
+    assert_eq!(all_tags.len(), 1);
+    assert_eq!(all_tags[0].name, "testing");
+}
+
+#[test]
+fn tag_index_cleared_on_state_clear_all() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("a.md"),
+        "---\ntags: [test]\n---\n\nText.\n",
+    )
+    .unwrap();
+
+    let state = vigil_lib::state::AppState::new();
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    state.set_index(index.clone());
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+    state.set_tag_index(tag_index);
+
+    assert!(state.tag_index().is_some());
+
+    state.clear_all();
+    assert!(state.tag_index().is_none());
+}
+
+#[test]
+fn tag_index_thread_safety() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("a.md"),
+        "---\ntags: [shared]\n---\n\nText.\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+
+    let tag_clone = tag_index.clone();
+    let handle = thread::spawn(move || {
+        let tags = tag_clone.get_all_tags();
+        assert_eq!(tags.len(), 1);
+        tags
+    });
+
+    // Concurrent read from main thread
+    let files = tag_index.get_files_by_tag("shared");
+    assert_eq!(files.len(), 1);
+
+    let tags = handle.join().unwrap();
+    assert_eq!(tags[0].name, "shared");
 }

@@ -455,8 +455,10 @@ fn extract_note_metadata(abs_path: &Path, rel_path: &str) -> Option<NoteMetadata
         });
 
     // Tags: combine frontmatter tags and inline #tag patterns.
+    // Strip fenced code blocks before extracting inline tags.
+    let body_no_code = strip_fenced_code_blocks(&body);
     let mut tags: Vec<String> = frontmatter_tags;
-    let inline_tags = extract_inline_tags(&body);
+    let inline_tags = extract_inline_tags(&body_no_code);
     for t in inline_tags {
         let normalized = t.to_lowercase();
         if !tags.contains(&normalized) {
@@ -588,6 +590,47 @@ fn extract_first_heading(content: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Strip fenced code blocks (``` or ~~~) from markdown body text.
+///
+/// Returns the body with all fenced code block content replaced by empty lines
+/// so that line numbers are preserved for other processing.
+fn strip_fenced_code_blocks(body: &str) -> String {
+    let mut result = String::with_capacity(body.len());
+    let mut in_code_block = false;
+    let mut fence_char = ' ';
+    let mut fence_len = 0;
+
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if !in_code_block {
+            // Check for opening fence: 3+ backticks or tildes
+            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+                in_code_block = true;
+                fence_char = trimmed.chars().next().unwrap();
+                fence_len = trimmed.chars().take_while(|&c| c == fence_char).count();
+                result.push('\n');
+                continue;
+            }
+            result.push_str(line);
+            result.push('\n');
+        } else {
+            // Check for closing fence: same char, at least same length
+            if trimmed.starts_with(fence_char)
+                && trimmed.chars().take_while(|&c| c == fence_char).count() >= fence_len
+                && trimmed
+                    .chars()
+                    .skip_while(|&c| c == fence_char)
+                    .all(|c| c.is_whitespace())
+            {
+                in_code_block = false;
+            }
+            result.push('\n');
+        }
+    }
+
+    result
 }
 
 /// Extract inline `#tag` patterns from body text.
@@ -902,6 +945,41 @@ mod tests {
         assert!(tags.contains(&"alpha".to_string()));
         assert!(tags.contains(&"beta".to_string()));
         assert!(body.starts_with("Body"));
+    }
+
+    #[test]
+    fn strip_fenced_code_blocks_removes_content() {
+        let body = "Before\n```\n#code-tag\n```\nAfter #real-tag\n";
+        let stripped = strip_fenced_code_blocks(body);
+        assert!(!stripped.contains("#code-tag"));
+        assert!(stripped.contains("#real-tag"));
+        assert!(stripped.contains("Before"));
+        assert!(stripped.contains("After"));
+    }
+
+    #[test]
+    fn strip_fenced_code_blocks_with_tilde() {
+        let body = "Text\n~~~python\n#not-a-tag\n~~~\n#yes-a-tag\n";
+        let stripped = strip_fenced_code_blocks(body);
+        assert!(!stripped.contains("#not-a-tag"));
+        assert!(stripped.contains("#yes-a-tag"));
+    }
+
+    #[test]
+    fn inline_tags_not_extracted_from_code_blocks() {
+        let dir = temp_workspace();
+        let content = "# Note\n\nReal #valid-tag here.\n\n```\n#code-tag\n```\n";
+        fs::write(dir.path().join("note.md"), content).unwrap();
+
+        let index = FileIndex::new(dir.path().to_path_buf());
+        index.full_scan();
+
+        let meta = index.get_note_metadata("note.md").unwrap();
+        assert!(meta.tags.contains(&"valid-tag".to_string()));
+        assert!(
+            !meta.tags.contains(&"code-tag".to_string()),
+            "tags inside code blocks should not be indexed"
+        );
     }
 
     #[test]

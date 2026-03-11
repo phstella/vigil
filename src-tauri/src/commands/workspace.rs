@@ -3,7 +3,7 @@
 use tauri::{AppHandle, State};
 
 use crate::core::fs::WorkspaceFs;
-use crate::core::index::{FileIndex, FileWatcher};
+use crate::core::index::{FileIndex, FileWatcher, TagIndex};
 use crate::core::links::LinkGraph;
 use crate::events::index_events;
 use crate::models::error::VigilError;
@@ -41,6 +41,11 @@ pub async fn open_workspace(
     let link_graph = LinkGraph::new();
     link_graph.rebuild(&index);
     state.set_link_graph(link_graph);
+
+    // Build the tag index from the indexed notes.
+    let tag_index = TagIndex::new();
+    tag_index.rebuild(&index);
+    state.set_tag_index(tag_index);
 
     // Emit index-ready event.
     index_events::emit_index_ready(

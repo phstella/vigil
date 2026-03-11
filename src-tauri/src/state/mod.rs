@@ -7,7 +7,7 @@
 use std::sync::{Arc, RwLock};
 
 use crate::core::fs::WorkspaceFs;
-use crate::core::index::{FileIndex, FileWatcher};
+use crate::core::index::{FileIndex, FileWatcher, TagIndex};
 use crate::core::links::LinkGraph;
 
 /// Application state managed by Tauri's `State<>` extractor.
@@ -20,6 +20,8 @@ pub struct AppState {
     index: Arc<RwLock<Option<FileIndex>>>,
     /// Bidirectional link graph built from the file index.
     link_graph: Arc<RwLock<Option<LinkGraph>>>,
+    /// Tag index built from the file index.
+    tag_index: Arc<RwLock<Option<TagIndex>>>,
     /// The file watcher is not `Debug`, so we wrap it separately.
     /// It is held alive as long as a workspace is open.
     watcher: Arc<RwLock<Option<WatcherHolder>>>,
@@ -43,6 +45,7 @@ impl AppState {
             workspace: Arc::new(RwLock::new(None)),
             index: Arc::new(RwLock::new(None)),
             link_graph: Arc::new(RwLock::new(None)),
+            tag_index: Arc::new(RwLock::new(None)),
             watcher: Arc::new(RwLock::new(None)),
         }
     }
@@ -95,6 +98,22 @@ impl AppState {
         *guard = Some(graph);
     }
 
+    /// Get a clone of the current tag index.
+    ///
+    /// Returns `None` if no workspace is open or the tag index has not been built.
+    pub fn tag_index(&self) -> Option<TagIndex> {
+        self.tag_index
+            .read()
+            .expect("tag_index lock poisoned")
+            .clone()
+    }
+
+    /// Set (or replace) the current tag index.
+    pub fn set_tag_index(&self, tag_index: TagIndex) {
+        let mut guard = self.tag_index.write().expect("tag_index lock poisoned");
+        *guard = Some(tag_index);
+    }
+
     /// Set the file watcher for the current workspace.
     ///
     /// The previous watcher (if any) is dropped, which signals it to stop.
@@ -114,6 +133,10 @@ impl AppState {
     /// Called when switching workspaces.
     pub fn clear_all(&self) {
         self.clear_watcher();
+        {
+            let mut guard = self.tag_index.write().expect("tag_index lock poisoned");
+            *guard = None;
+        }
         {
             let mut guard = self.link_graph.write().expect("link_graph lock poisoned");
             *guard = None;

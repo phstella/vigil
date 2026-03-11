@@ -5,7 +5,7 @@ use tauri::State;
 use crate::core::content::ContentSearcher;
 use crate::core::search::FuzzyFinder;
 use crate::models::error::VigilError;
-use crate::models::search::{FuzzyFindResponse, SearchContentResponse};
+use crate::models::search::{FuzzyFindResponse, SearchContentResponse, Tag};
 use crate::state::AppState;
 
 /// Default result limit when the caller does not specify one.
@@ -55,4 +55,25 @@ pub async fn search_content(
     let matches = searcher.search_content(&query, &workspace_root, limit);
 
     Ok(SearchContentResponse { matches })
+}
+
+/// Get all tags across the workspace, sorted by usage count descending.
+///
+/// Each tag includes its name, file count, and the list of files using it.
+#[tauri::command]
+pub async fn get_all_tags(state: State<'_, AppState>) -> Result<Vec<Tag>, VigilError> {
+    let tag_index = state.tag_index().ok_or(VigilError::IndexUnavailable)?;
+    Ok(tag_index.get_all_tags())
+}
+
+/// Get workspace-relative file paths that contain a given tag.
+///
+/// Tag matching is case-insensitive.
+#[tauri::command]
+pub async fn get_files_by_tag(
+    tag: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, VigilError> {
+    let tag_index = state.tag_index().ok_or(VigilError::IndexUnavailable)?;
+    Ok(tag_index.get_files_by_tag(&tag))
 }

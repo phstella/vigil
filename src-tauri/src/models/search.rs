@@ -35,6 +35,17 @@ pub struct FuzzyFindResponse {
     pub matches: Vec<FuzzyMatch>,
 }
 
+/// A tag across the workspace with usage count.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tag {
+    /// Normalized tag name (lowercase).
+    pub name: String,
+    /// Number of notes using this tag.
+    pub count: u64,
+    /// Workspace-relative paths of notes with this tag.
+    pub files: Vec<String>,
+}
+
 /// A single content search match with snippet context (Epic 4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentMatch {
@@ -88,6 +99,20 @@ mod tests {
         let deser: FuzzyMatch = serde_json::from_str(&json).unwrap();
         assert_eq!(deser.path, "notes/hello.md");
         assert_eq!(deser.matched_indices.len(), 5);
+    }
+
+    #[test]
+    fn tag_roundtrip() {
+        let t = Tag {
+            name: "project".into(),
+            count: 5,
+            files: vec!["a.md".into(), "b.md".into()],
+        };
+        let json = serde_json::to_string(&t).unwrap();
+        let deser: Tag = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.name, "project");
+        assert_eq!(deser.count, 5);
+        assert_eq!(deser.files.len(), 2);
     }
 
     #[test]

@@ -21,6 +21,8 @@ pub fn run() {
             commands::git::get_git_status,
             commands::search::fuzzy_find,
             commands::search::search_content,
+            commands::search::get_all_tags,
+            commands::search::get_files_by_tag,
             commands::links::get_backlinks,
         ])
         .setup(|app| {

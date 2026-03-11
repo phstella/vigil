@@ -8,6 +8,8 @@ use std::thread;
 use std::time::Duration;
 
 use vigil_lib::core::index::{ChangeKind, FileIndex, FileWatcher};
+use vigil_lib::core::search::FuzzyFinder;
+use vigil_lib::models::files::EntryKind;
 
 /// Create a temporary workspace directory.
 fn temp_workspace() -> tempfile::TempDir {
@@ -617,4 +619,223 @@ fn scan_result_has_valid_duration() {
     assert_eq!(result.notes_count, 50);
     // Duration should be reasonable (< 5 seconds for 50 files).
     assert!(result.duration_ms < 5000);
+}
+
+// ---------------------------------------------------------------------------
+// Fuzzy search integration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn fuzzy_find_empty_query_returns_recent_files() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("alpha.md"), "# Alpha").unwrap();
+    fs::write(dir.path().join("beta.md"), "# Beta").unwrap();
+    fs::write(dir.path().join("gamma.txt"), "text").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("", 10);
+
+    assert_eq!(results.len(), 3);
+    assert!(results.iter().all(|m| m.score == 0.0));
+    assert!(results.iter().all(|m| m.kind == EntryKind::File));
+}
+
+#[test]
+fn fuzzy_find_matches_by_filename() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("readme.md"), "# Readme").unwrap();
+    fs::write(dir.path().join("config.toml"), "key=val").unwrap();
+    fs::write(dir.path().join("recipe.md"), "# Recipe").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("read", 10);
+
+    // "readme.md" should match "read"
+    let paths: Vec<&str> = results.iter().map(|m| m.path.as_str()).collect();
+    assert!(paths.contains(&"readme.md"));
+    assert!(results.iter().all(|m| m.score > 0.0));
+}
+
+#[test]
+fn fuzzy_find_respects_limit() {
+    let dir = temp_workspace();
+    for i in 0..30 {
+        fs::write(
+            dir.path().join(format!("note-{i:03}.md")),
+            format!("# Note {i}"),
+        )
+        .unwrap();
+    }
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("note", 5);
+
+    assert_eq!(results.len(), 5);
+}
+
+#[test]
+fn fuzzy_find_results_sorted_by_score() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("abc.md"), "text").unwrap();
+    fs::write(dir.path().join("a_long_b_long_c.md"), "text").unwrap();
+    fs::write(dir.path().join("xyz.md"), "text").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("abc", 10);
+
+    // Results should be in descending score order.
+    for window in results.windows(2) {
+        assert!(
+            window[0].score >= window[1].score,
+            "expected {} >= {} for {} vs {}",
+            window[0].score,
+            window[1].score,
+            window[0].path,
+            window[1].path,
+        );
+    }
+}
+
+#[test]
+fn fuzzy_find_excludes_directories() {
+    let dir = temp_workspace();
+    fs::create_dir(dir.path().join("subdir")).unwrap();
+    fs::write(dir.path().join("subdir/file.md"), "# File").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+
+    // "sub" could match the directory name, but we only return files.
+    let results = finder.fuzzy_find("sub", 10);
+    assert!(results.iter().all(|m| m.kind == EntryKind::File));
+}
+
+#[test]
+fn fuzzy_find_returns_matched_indices() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("hello.md"), "# Hello").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("hlo", 10);
+
+    assert!(!results.is_empty());
+    let first = &results[0];
+    assert_eq!(first.path, "hello.md");
+    assert!(!first.matched_indices.is_empty());
+}
+
+#[test]
+fn fuzzy_find_searches_full_path() {
+    let dir = temp_workspace();
+    fs::create_dir_all(dir.path().join("docs/api")).unwrap();
+    fs::write(dir.path().join("docs/api/reference.md"), "# Ref").unwrap();
+    fs::write(dir.path().join("notes.md"), "# Notes").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("api/ref", 10);
+
+    assert!(!results.is_empty());
+    assert_eq!(results[0].path, "docs/api/reference.md");
+}
+
+#[test]
+fn fuzzy_find_case_insensitive_for_lowercase_query() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("README.md"), "# Readme").unwrap();
+    fs::write(dir.path().join("other.txt"), "text").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    // Lowercase query should match uppercase filename (smart case).
+    let results = finder.fuzzy_find("readme", 10);
+
+    let paths: Vec<&str> = results.iter().map(|m| m.path.as_str()).collect();
+    assert!(paths.contains(&"README.md"));
+}
+
+#[test]
+fn fuzzy_find_performance_with_many_files() {
+    let dir = temp_workspace();
+    // Create a modest workspace (1000 files across subdirectories).
+    for i in 0..10 {
+        let subdir = dir.path().join(format!("dir-{i}"));
+        fs::create_dir(&subdir).unwrap();
+        for j in 0..100 {
+            fs::write(
+                subdir.join(format!("file-{j:03}.md")),
+                format!("# File {i}-{j}"),
+            )
+            .unwrap();
+        }
+    }
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    assert_eq!(index.get_file_count(), 1000);
+
+    let finder = FuzzyFinder::new(&index);
+
+    let start = std::time::Instant::now();
+    let results = finder.fuzzy_find("file-05", 20);
+    let elapsed = start.elapsed();
+
+    assert!(!results.is_empty());
+    // Must complete well under the 50ms budget for 10K files; 1K files
+    // should be comfortably under 50ms even in debug mode.
+    assert!(
+        elapsed.as_millis() < 500,
+        "fuzzy_find took {}ms, expected < 500ms for 1K files in debug mode",
+        elapsed.as_millis()
+    );
+}
+
+#[test]
+fn fuzzy_find_no_match_returns_empty() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("hello.md"), "# Hello").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("zzzzzzzzz", 10);
+
+    assert!(results.is_empty());
+}
+
+#[test]
+fn fuzzy_find_empty_index_returns_empty() {
+    let dir = temp_workspace();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let finder = FuzzyFinder::new(&index);
+    let results = finder.fuzzy_find("anything", 10);
+    assert!(results.is_empty());
+
+    let results = finder.fuzzy_find("", 10);
+    assert!(results.is_empty());
 }

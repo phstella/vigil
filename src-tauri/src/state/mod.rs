@@ -8,6 +8,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::core::fs::WorkspaceFs;
 use crate::core::index::{FileIndex, FileWatcher};
+use crate::core::links::LinkGraph;
 
 /// Application state managed by Tauri's `State<>` extractor.
 ///
@@ -17,6 +18,8 @@ use crate::core::index::{FileIndex, FileWatcher};
 pub struct AppState {
     workspace: Arc<RwLock<Option<WorkspaceFs>>>,
     index: Arc<RwLock<Option<FileIndex>>>,
+    /// Bidirectional link graph built from the file index.
+    link_graph: Arc<RwLock<Option<LinkGraph>>>,
     /// The file watcher is not `Debug`, so we wrap it separately.
     /// It is held alive as long as a workspace is open.
     watcher: Arc<RwLock<Option<WatcherHolder>>>,
@@ -39,6 +42,7 @@ impl AppState {
         Self {
             workspace: Arc::new(RwLock::new(None)),
             index: Arc::new(RwLock::new(None)),
+            link_graph: Arc::new(RwLock::new(None)),
             watcher: Arc::new(RwLock::new(None)),
         }
     }
@@ -75,6 +79,22 @@ impl AppState {
         *guard = Some(index);
     }
 
+    /// Get a clone of the current link graph.
+    ///
+    /// Returns `None` if no workspace is open or the graph has not been built.
+    pub fn link_graph(&self) -> Option<LinkGraph> {
+        self.link_graph
+            .read()
+            .expect("link_graph lock poisoned")
+            .clone()
+    }
+
+    /// Set (or replace) the current link graph.
+    pub fn set_link_graph(&self, graph: LinkGraph) {
+        let mut guard = self.link_graph.write().expect("link_graph lock poisoned");
+        *guard = Some(graph);
+    }
+
     /// Set the file watcher for the current workspace.
     ///
     /// The previous watcher (if any) is dropped, which signals it to stop.
@@ -94,6 +114,10 @@ impl AppState {
     /// Called when switching workspaces.
     pub fn clear_all(&self) {
         self.clear_watcher();
+        {
+            let mut guard = self.link_graph.write().expect("link_graph lock poisoned");
+            *guard = None;
+        }
         {
             let mut guard = self.index.write().expect("index lock poisoned");
             *guard = None;

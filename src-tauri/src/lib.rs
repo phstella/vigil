@@ -17,6 +17,10 @@ pub fn run() {
             commands::fs::create_note,
             commands::fs::rename_file,
             commands::fs::delete_file,
+            commands::git::get_git_hunks,
+            commands::git::get_git_status,
+            commands::search::fuzzy_find,
+            commands::links::get_backlinks,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

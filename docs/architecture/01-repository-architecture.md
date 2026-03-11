@@ -284,7 +284,7 @@ The application shell composes into seven visual zones. Each zone maps to specif
 
 - **Command-driven.** All frontend-to-backend operations use Tauri `invoke()` with typed request/response payloads defined in `src-tauri/src/models/`.
 - **Event-driven push.** Backend pushes state changes via typed event channels (`index://updated`, `git://hunks`, `status://updated`). Frontend subscribes through `src/lib/ipc/events.ts`.
-- **Envelope format.** All responses use `{ ok, data }` or `{ ok, error: { code, message, details } }` as defined in `docs/specs/ipc-contracts.md`.
+- **Response format.** Commands resolve to typed payloads on success and reject with `ErrorEnvelope { code, message, details? }` on failure, as defined in `docs/specs/ipc-contracts.md`.
 - **Path confinement.** Every command validates that file paths resolve within the workspace root. Traversal outside the root returns `PATH_OUTSIDE_WORKSPACE`.
 - **Plugin APIs (Epic 4).** Plugin host calls are capability-scoped and versioned. No remote plugin store. Plugins are loaded from local filesystem only.
 

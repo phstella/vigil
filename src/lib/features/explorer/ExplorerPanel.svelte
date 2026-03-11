@@ -25,6 +25,27 @@
 		</span>
 	</div>
 
+	<div class="px-3 pb-2">
+		<div class="rounded-md border border-surface-border bg-surface-overlay/40 px-2 py-1.5">
+			<div class="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Notes</div>
+			<div class="text-sm font-semibold text-text-primary">{explorerStore.notesCount}</div>
+		</div>
+	</div>
+
+	<div class="px-3 pb-2">
+		<div class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Collections</div>
+		<ul class="space-y-1">
+			{#each explorerStore.collections as collection (collection.path)}
+				<li class="flex items-center justify-between rounded-sm px-1 py-0.5 text-xs text-text-secondary">
+					<span class="truncate">{collection.name}</span>
+					<span class="shrink-0 text-text-muted">
+						{collection.notesCount} notes / {collection.filesCount} files
+					</span>
+				</li>
+			{/each}
+		</ul>
+	</div>
+
 	<div class="flex-1 overflow-y-auto px-1 pb-2">
 		<FileTree
 			nodes={explorerStore.tree}

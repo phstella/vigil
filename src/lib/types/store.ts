@@ -103,6 +103,8 @@ export interface SettingsState {
 	fontFamily: string;
 	/** Sidebar width in pixels. */
 	sidebarWidth: number;
+	/** Whether the sidebar auto-hides after inactivity. */
+	autoHideSidebar: boolean;
 	/** Whether the editor wraps long lines. */
 	editorWordWrap: boolean;
 }

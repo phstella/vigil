@@ -18,6 +18,16 @@ function createUiStore() {
 			update((s) => ({ ...s, sidebarOpen: !s.sidebarOpen }));
 		},
 
+		/** Open sidebar without changing section. */
+		openSidebar() {
+			update((s) => ({ ...s, sidebarOpen: true }));
+		},
+
+		/** Close sidebar without clearing section. */
+		closeSidebar() {
+			update((s) => ({ ...s, sidebarOpen: false }));
+		},
+
 		/** Switch the active sidebar panel. */
 		setSidebarSection(section: SidebarSection) {
 			update((s) => ({ ...s, sidebarSection: section, sidebarOpen: true }));

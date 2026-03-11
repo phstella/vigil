@@ -13,6 +13,13 @@ export interface TreeNode extends DirEntry {
 	children?: TreeNode[];
 }
 
+export interface CollectionSummary {
+	name: string;
+	path: string;
+	filesCount: number;
+	notesCount: number;
+}
+
 // ---------------------------------------------------------------------------
 // Mock data -- realistic workspace tree
 // ---------------------------------------------------------------------------
@@ -73,6 +80,25 @@ const MOCK_TREE: TreeNode[] = [
 	file('.vigilrc', '/workspace/.vigilrc', null, 128)
 ];
 
+function summarizeNode(node: TreeNode): { filesCount: number; notesCount: number } {
+	if (node.kind === 'file') {
+		return {
+			filesCount: 1,
+			notesCount: node.ext === 'md' ? 1 : 0
+		};
+	}
+
+	let filesCount = 0;
+	let notesCount = 0;
+	for (const child of node.children ?? []) {
+		const childSummary = summarizeNode(child);
+		filesCount += childSummary.filesCount;
+		notesCount += childSummary.notesCount;
+	}
+
+	return { filesCount, notesCount };
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -82,6 +108,10 @@ export interface ExplorerState {
 	tree: TreeNode[];
 	/** Workspace display name. */
 	workspaceName: string;
+	/** Total markdown note count for the workspace. */
+	notesCount: number;
+	/** Top-level collection summaries for explorer header display. */
+	collections: CollectionSummary[];
 	/** Set of expanded directory paths. */
 	expandedDirs: Set<string>;
 	/** Currently selected file path, or null. */
@@ -91,6 +121,18 @@ export interface ExplorerState {
 function createExplorerStore() {
 	const tree: TreeNode[] = MOCK_TREE;
 	const workspaceName: string = 'My Workspace';
+	const notesCount = tree.reduce((sum, node) => sum + summarizeNode(node).notesCount, 0);
+	const collections: CollectionSummary[] = tree
+		.filter((node): node is TreeNode & { kind: 'dir' } => node.kind === 'dir')
+		.map((node) => {
+			const summary = summarizeNode(node);
+			return {
+				name: node.name,
+				path: node.path,
+				filesCount: summary.filesCount,
+				notesCount: summary.notesCount
+			};
+		});
 	let expandedDirs = $state<Set<string>>(new Set<string>());
 	let selectedFile = $state<string | null>(null);
 
@@ -100,6 +142,12 @@ function createExplorerStore() {
 		},
 		get workspaceName() {
 			return workspaceName;
+		},
+		get notesCount() {
+			return notesCount;
+		},
+		get collections() {
+			return collections;
 		},
 		get expandedDirs() {
 			return expandedDirs;

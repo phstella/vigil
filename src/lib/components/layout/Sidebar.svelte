@@ -13,11 +13,15 @@
 	let {
 		isOpen = false,
 		activeSection = null,
-		children
+		children,
+		onMouseEnter,
+		onMouseLeave
 	}: {
 		isOpen?: boolean;
 		activeSection?: Section | null;
 		children?: Snippet;
+		onMouseEnter?: () => void;
+		onMouseLeave?: () => void;
 	} = $props();
 
 	const sectionTitles: Record<Section, string> = {
@@ -33,6 +37,8 @@
 	style="width: {isOpen ? '260px' : '0px'}"
 	aria-label="Sidebar"
 	aria-hidden={!isOpen}
+	onmouseenter={() => onMouseEnter?.()}
+	onmouseleave={() => onMouseLeave?.()}
 >
 	<div class="flex h-full w-[260px] flex-col">
 		{#if activeSection}

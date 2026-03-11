@@ -7,6 +7,7 @@ function createSettingsStore() {
 		fontSize: 14,
 		fontFamily: 'JetBrains Mono, Fira Code, monospace',
 		sidebarWidth: 260,
+		autoHideSidebar: true,
 		editorWordWrap: true
 	});
 

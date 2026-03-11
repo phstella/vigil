@@ -8,13 +8,16 @@
 //! - Git hunk event flow for modified files
 
 use std::fs;
+use std::path::Path;
 use std::sync::atomic::Ordering;
 
 use vigil_lib::core::fs::WorkspaceFs;
 use vigil_lib::core::git::GitService;
 use vigil_lib::core::index::{ChangeKind, FileIndex, TagIndex};
 use vigil_lib::core::links::LinkGraph;
+use vigil_lib::models::error::{ErrorEnvelope, VigilError};
 use vigil_lib::models::files::WriteFileRequest;
+use vigil_lib::models::links::BacklinksResponse;
 use vigil_lib::state::AppState;
 
 fn temp_workspace() -> tempfile::TempDir {
@@ -24,17 +27,23 @@ fn temp_workspace() -> tempfile::TempDir {
 // ---------------------------------------------------------------------------
 // Gap 3: workspace_status must return WORKSPACE_NOT_OPEN when no workspace
 // ---------------------------------------------------------------------------
+// These tests call extracted command-logic helpers directly (not Tauri runtime
+// integration) so they stay fast while validating command boundary behavior.
 
 #[test]
-fn workspace_status_requires_open_workspace() {
+fn workspace_status_command_logic_requires_open_workspace() {
     let state = AppState::new();
-    // No workspace set -- workspace() should be None.
-    assert!(state.workspace().is_none());
-    // The actual command cannot be called without Tauri runtime,
-    // but we verify the precondition that the command checks:
-    // state.workspace().ok_or(WorkspaceNotOpen) should yield Err.
-    let result = state.workspace().ok_or("WORKSPACE_NOT_OPEN");
-    assert!(result.is_err());
+    let result = vigil_lib::commands::status::workspace_status_for_state(&state);
+    assert!(matches!(result, Err(VigilError::WorkspaceNotOpen)));
+}
+
+#[test]
+fn get_backlinks_command_logic_checks_workspace_before_index() {
+    let state = AppState::new();
+    // Ensure the link graph exists; missing workspace must still take precedence.
+    state.set_link_graph(LinkGraph::new());
+    let result = vigil_lib::commands::links::get_backlinks_for_state("target.md", &state);
+    assert!(matches!(result, Err(VigilError::WorkspaceNotOpen)));
 }
 
 // ---------------------------------------------------------------------------
@@ -420,6 +429,34 @@ fn status_updated_payload_has_contract_version() {
     };
     let json = serde_json::to_string(&payload).unwrap();
     assert!(json.contains("\"contract_version\":\"v1\""));
+}
+
+#[test]
+fn ipc_contract_doc_matches_typed_success_and_error_envelope_behavior() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("src-tauri must be nested in repository root");
+    let doc_path = repo_root.join("docs/specs/ipc-contracts.md");
+    let doc = fs::read_to_string(doc_path).expect("failed to read IPC contract doc");
+
+    // Contract wording should describe typed command success payloads directly.
+    assert!(doc.contains("Every `#[tauri::command]` returns `Result<T, VigilError>`."));
+    assert!(doc.contains("no backend-provided `ok/data` wrapper"));
+    assert!(!doc.contains("{ \"ok\": true, \"data\": <T> }"));
+
+    // Backend success payloads are typed models, not wrapped in an ok/data envelope.
+    let success_json = serde_json::to_value(BacklinksResponse { backlinks: vec![] }).unwrap();
+    assert!(success_json.get("backlinks").is_some());
+    assert!(success_json.get("ok").is_none());
+    assert!(success_json.get("data").is_none());
+
+    // Backend errors are serialized ErrorEnvelope values.
+    let err_json = serde_json::to_value(ErrorEnvelope::from(VigilError::WorkspaceNotOpen)).unwrap();
+    assert_eq!(
+        err_json.get("code").and_then(serde_json::Value::as_str),
+        Some("WORKSPACE_NOT_OPEN")
+    );
+    assert!(err_json.get("message").is_some());
 }
 
 // ---------------------------------------------------------------------------

@@ -12,30 +12,42 @@ truth for command signatures, response shapes, error codes, and event payloads.
 - Contract version: `v1`.
 - Backward-compatible additions: new optional fields only.
 - Breaking changes: require `v2` namespace and migration notes.
-- All responses and event payloads carry `contract_version: "v1"` so consumers
-  can detect mismatches during development.
+- Event payloads carry `contract_version: "v1"` so consumers can detect
+  mismatches during development.
+- Command responses use typed payloads and do not embed `contract_version`.
 
-## Common Envelope
+## Command Response Contract
 
-Every `#[tauri::command]` returns a `Result<T, VigilError>`. Tauri serializes
-this to the frontend as:
+Every `#[tauri::command]` returns `Result<T, VigilError>`.
 
-Success:
-```json
-{ "ok": true, "data": <T> }
-```
+- Success path: `invoke()` resolves with the serialized command payload `T`
+  directly (no backend-provided `ok/data` wrapper).
+- Error path: `invoke()` rejects with the serialized `ErrorEnvelope` produced by
+  `VigilError -> tauri::ipc::InvokeError`.
 
-Error:
+Success example (`workspace_status`-style typed payload):
 ```json
 {
-  "ok": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable description",
-    "details": {}
-  }
+  "branch": "main",
+  "sync_state": "synced",
+  "notes_count": 42,
+  "tags_count": 15,
+  "files_count": 100,
+  "version": "0.0.1",
+  "last_index_update_ms": 1700000000000
 }
 ```
+
+Error example:
+```json
+{
+  "code": "WORKSPACE_NOT_OPEN",
+  "message": "No workspace is currently open"
+}
+```
+
+`details` is optional and only present when additional structured context is
+provided.
 
 ### Error Codes
 

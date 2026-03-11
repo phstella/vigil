@@ -14,17 +14,8 @@ use crate::state::AppState;
 /// Application version from Cargo.toml, embedded at compile time.
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Query the current workspace status.
-///
-/// Aggregates:
-/// - Git branch name and sync state (from the workspace root)
-/// - Notes, tags, and files counts (from file and tag indices)
-/// - Application version (from Cargo.toml)
-/// - Tracked last index update timestamp
-///
-/// Returns `WORKSPACE_NOT_OPEN` when no workspace is active, per IPC contract.
-#[tauri::command]
-pub async fn workspace_status(state: State<'_, AppState>) -> Result<WorkspaceStatus, VigilError> {
+/// Shared `workspace_status` command logic, split for direct testing.
+pub fn workspace_status_for_state(state: &AppState) -> Result<WorkspaceStatus, VigilError> {
     // Require an open workspace per IPC contract.
     let ws = state.workspace().ok_or(VigilError::WorkspaceNotOpen)?;
 
@@ -49,4 +40,18 @@ pub async fn workspace_status(state: State<'_, AppState>) -> Result<WorkspaceSta
         version: APP_VERSION.to_string(),
         last_index_update_ms,
     })
+}
+
+/// Query the current workspace status.
+///
+/// Aggregates:
+/// - Git branch name and sync state (from the workspace root)
+/// - Notes, tags, and files counts (from file and tag indices)
+/// - Application version (from Cargo.toml)
+/// - Tracked last index update timestamp
+///
+/// Returns `WORKSPACE_NOT_OPEN` when no workspace is active, per IPC contract.
+#[tauri::command]
+pub async fn workspace_status(state: State<'_, AppState>) -> Result<WorkspaceStatus, VigilError> {
+    workspace_status_for_state(&state)
 }

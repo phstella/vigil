@@ -7,6 +7,7 @@ use std::fs;
 use std::thread;
 use std::time::Duration;
 
+use vigil_lib::core::content::ContentSearcher;
 use vigil_lib::core::index::{ChangeKind, FileIndex, FileWatcher};
 use vigil_lib::core::search::FuzzyFinder;
 use vigil_lib::models::files::EntryKind;
@@ -838,4 +839,230 @@ fn fuzzy_find_empty_index_returns_empty() {
 
     let results = finder.fuzzy_find("", 10);
     assert!(results.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Content search integration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn content_search_basic_match() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("note.md"),
+        "# Hello\n\nThis is a test note.\n",
+    )
+    .unwrap();
+    fs::write(dir.path().join("other.md"), "# Other\n\nNo match here.\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("test note", dir.path(), 50);
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].path, "note.md");
+    assert_eq!(results[0].line_number, 3);
+    assert!(results[0].preview.contains("test note"));
+}
+
+#[test]
+fn content_search_case_insensitive() {
+    let dir = temp_workspace();
+    fs::write(
+        dir.path().join("note.md"),
+        "Hello WORLD\nworld hello\nno match\n",
+    )
+    .unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("world", dir.path(), 50);
+
+    assert_eq!(results.len(), 2);
+}
+
+#[test]
+fn content_search_empty_query_returns_nothing() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "Some content\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("", dir.path(), 50);
+
+    assert!(results.is_empty());
+}
+
+#[test]
+fn content_search_respects_limit() {
+    let dir = temp_workspace();
+    let content: String = (0..100).map(|i| format!("line {i} keyword\n")).collect();
+    fs::write(dir.path().join("big.md"), &content).unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("keyword", dir.path(), 5);
+
+    assert_eq!(results.len(), 5);
+}
+
+#[test]
+fn content_search_skips_binary_files() {
+    let dir = temp_workspace();
+    // Binary file with null bytes.
+    let mut binary = vec![0u8; 200];
+    binary[0] = b's';
+    binary[1] = b'e';
+    binary[2] = b'a';
+    binary[3] = b'r';
+    binary[4] = b'c';
+    binary[5] = b'h';
+    binary[100] = 0; // null byte makes it binary
+    fs::write(dir.path().join("data.bin"), &binary).unwrap();
+    fs::write(dir.path().join("text.md"), "search here\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("search", dir.path(), 50);
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].path, "text.md");
+}
+
+#[test]
+fn content_search_correct_columns() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "hello world foo\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("world", dir.path(), 50);
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].line_number, 1);
+    assert_eq!(results[0].line_start_col, 6);
+    assert_eq!(results[0].line_end_col, 11);
+}
+
+#[test]
+fn content_search_multiple_matches_per_line() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "foo bar foo baz foo\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("foo", dir.path(), 50);
+
+    assert_eq!(results.len(), 3);
+    let cols: Vec<u32> = results.iter().map(|m| m.line_start_col).collect();
+    assert!(cols.contains(&0));
+    assert!(cols.contains(&8));
+    assert!(cols.contains(&16));
+}
+
+#[test]
+fn content_search_across_multiple_files() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("a.md"), "target found here\n").unwrap();
+    fs::write(dir.path().join("b.md"), "nothing here\n").unwrap();
+    fs::write(dir.path().join("c.md"), "another target line\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("target", dir.path(), 50);
+
+    assert_eq!(results.len(), 2);
+    let paths: Vec<&str> = results.iter().map(|m| m.path.as_str()).collect();
+    assert!(paths.contains(&"a.md"));
+    assert!(paths.contains(&"c.md"));
+}
+
+#[test]
+fn content_search_no_match_returns_empty() {
+    let dir = temp_workspace();
+    fs::write(dir.path().join("note.md"), "Hello world\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("zzzznotfound", dir.path(), 50);
+
+    assert!(results.is_empty());
+}
+
+#[test]
+fn content_search_in_subdirectories() {
+    let dir = temp_workspace();
+    fs::create_dir_all(dir.path().join("notes/daily")).unwrap();
+    fs::write(
+        dir.path().join("notes/daily/monday.md"),
+        "# Monday\n\nImportant meeting today.\n",
+    )
+    .unwrap();
+    fs::write(dir.path().join("top.md"), "Top level file.\n").unwrap();
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+
+    let searcher = ContentSearcher::new(&index);
+    let results = searcher.search_content("meeting", dir.path(), 50);
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].path, "notes/daily/monday.md");
+    assert_eq!(results[0].line_number, 3);
+}
+
+#[test]
+fn content_search_performance_1k_files() {
+    let dir = temp_workspace();
+    // Create 1000 files across 10 directories.
+    for i in 0..10 {
+        let subdir = dir.path().join(format!("dir-{i}"));
+        fs::create_dir(&subdir).unwrap();
+        for j in 0..100 {
+            let content = if j == 50 {
+                format!("# File {i}-{j}\n\nThis contains the needle phrase.\n")
+            } else {
+                format!("# File {i}-{j}\n\nJust regular content here.\n")
+            };
+            fs::write(subdir.join(format!("file-{j:03}.md")), &content).unwrap();
+        }
+    }
+
+    let index = FileIndex::new(dir.path().to_path_buf());
+    index.full_scan();
+    assert_eq!(index.get_file_count(), 1000);
+
+    let searcher = ContentSearcher::new(&index);
+
+    let start = std::time::Instant::now();
+    let results = searcher.search_content("needle phrase", dir.path(), 50);
+    let elapsed = start.elapsed();
+
+    // Should find exactly 10 matches (one per directory, in file-050.md).
+    assert_eq!(results.len(), 10);
+
+    // Should complete in reasonable time even in debug mode.
+    assert!(
+        elapsed.as_millis() < 5000,
+        "content search took {}ms, expected < 5000ms for 1K files in debug mode",
+        elapsed.as_millis()
+    );
 }

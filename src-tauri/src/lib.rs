@@ -20,6 +20,7 @@ pub fn run() {
             commands::git::get_git_hunks,
             commands::git::get_git_status,
             commands::search::fuzzy_find,
+            commands::search::search_content,
             commands::links::get_backlinks,
         ])
         .setup(|app| {

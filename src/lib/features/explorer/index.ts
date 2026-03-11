@@ -2,5 +2,6 @@
 export { default as ExplorerPanel } from './ExplorerPanel.svelte';
 export { default as FileTree } from './FileTree.svelte';
 export { default as FileTreeNode } from './FileTreeNode.svelte';
-export { explorerStore } from './explorer-store';
-export type { TreeNode, ExplorerState } from './explorer-store';
+export { default as SearchPanel } from './SearchPanel.svelte';
+export { explorerStore, searchStore } from './explorer-store';
+export type { TreeNode, ExplorerState, SearchResult } from './explorer-store';

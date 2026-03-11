@@ -132,3 +132,105 @@ function createExplorerStore() {
 }
 
 export const explorerStore = createExplorerStore();
+
+// ---------------------------------------------------------------------------
+// Search store
+// ---------------------------------------------------------------------------
+
+/** A single search result entry. */
+export interface SearchResult {
+	/** File path relative to workspace root. */
+	filePath: string;
+	/** Display file name. */
+	fileName: string;
+	/** 1-based line number of the match. */
+	lineNumber: number;
+	/** Full text of the matched line. */
+	lineContent: string;
+}
+
+/**
+ * Mock search results -- realistic content matches across workspace files.
+ * Will be replaced by real backend search_content results once IPC is wired.
+ */
+const MOCK_SEARCH_RESULTS: SearchResult[] = [
+	{
+		filePath: '/workspace/notes/projects/vigil-roadmap.md',
+		fileName: 'vigil-roadmap.md',
+		lineNumber: 12,
+		lineContent: 'Implement the search panel with debounced input and result highlighting.'
+	},
+	{
+		filePath: '/workspace/notes/projects/design-system.md',
+		fileName: 'design-system.md',
+		lineNumber: 34,
+		lineContent: 'The search component uses a monospace font for snippet display.'
+	},
+	{
+		filePath: '/workspace/notes/daily/2026-03-11.md',
+		fileName: '2026-03-11.md',
+		lineNumber: 5,
+		lineContent: 'Worked on search functionality and sidebar integration today.'
+	},
+	{
+		filePath: '/workspace/notes/index.md',
+		fileName: 'index.md',
+		lineNumber: 8,
+		lineContent: 'Use the search panel to find notes across the workspace quickly.'
+	},
+	{
+		filePath: '/workspace/scripts/build.ts',
+		fileName: 'build.ts',
+		lineNumber: 22,
+		lineContent: 'const searchPaths = glob.sync("**/*.md", { cwd: root });'
+	},
+	{
+		filePath: '/workspace/README.md',
+		fileName: 'README.md',
+		lineNumber: 15,
+		lineContent: 'Full-text search is available via the sidebar search panel or Ctrl+Shift+F.'
+	},
+	{
+		filePath: '/workspace/notes/quick-capture.md',
+		fileName: 'quick-capture.md',
+		lineNumber: 3,
+		lineContent: 'Quick search: remember to review the roadmap before standup.'
+	},
+	{
+		filePath: '/workspace/templates/note-template.md',
+		fileName: 'note-template.md',
+		lineNumber: 1,
+		lineContent: '# {{title}} -- searchable note template'
+	}
+];
+
+function createSearchStore() {
+	let query = $state('');
+
+	const results = $derived.by(() => {
+		if (query.length === 0) return [];
+		const lower = query.toLowerCase();
+		return MOCK_SEARCH_RESULTS.filter(
+			(r) =>
+				r.lineContent.toLowerCase().includes(lower) ||
+				r.fileName.toLowerCase().includes(lower) ||
+				r.filePath.toLowerCase().includes(lower)
+		);
+	});
+
+	return {
+		get query() {
+			return query;
+		},
+		get results(): SearchResult[] {
+			return results;
+		},
+
+		/** Update the active search query. */
+		setQuery(value: string) {
+			query = value;
+		}
+	};
+}
+
+export const searchStore = createSearchStore();

@@ -8,6 +8,16 @@ use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(state::AppState::new())
+        .invoke_handler(tauri::generate_handler![
+            commands::workspace::open_workspace,
+            commands::fs::list_dir,
+            commands::fs::read_file,
+            commands::fs::write_file,
+            commands::fs::create_note,
+            commands::fs::rename_file,
+            commands::fs::delete_file,
+        ])
         .setup(|app| {
             #[cfg(debug_assertions)]
             {

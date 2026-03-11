@@ -3,5 +3,7 @@
 
 pub mod fs;
 pub mod git;
+pub mod links;
 pub mod search;
+pub mod status;
 pub mod workspace;

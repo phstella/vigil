@@ -1,2 +1,4 @@
 // Barrel file for layout components.
-// Re-export layout components as they are created.
+export { default as AppShell } from './AppShell.svelte';
+export { default as TitleBar } from './TitleBar.svelte';
+export { default as WorkspaceGrid } from './WorkspaceGrid.svelte';

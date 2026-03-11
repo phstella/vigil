@@ -30,7 +30,16 @@
 			<Sidebar isOpen={sidebarOpen} {activeSection} />
 		{/snippet}
 
-		<div class="flex flex-1 items-center justify-center">
+		{#snippet rightPanel()}
+			<div class="flex h-full items-center justify-center bg-surface-raised p-4">
+				<div class="text-center">
+					<p class="text-sm font-medium text-text-secondary">Code Pane</p>
+					<p class="mt-1 text-xs text-text-muted">Right split panel</p>
+				</div>
+			</div>
+		{/snippet}
+
+		<div class="flex h-full items-center justify-center p-4">
 			<div class="text-center">
 				<h1 class="text-2xl font-semibold text-text-primary">Vigil</h1>
 				<p class="mt-1 text-sm text-text-muted">Open a workspace to get started</p>

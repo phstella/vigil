@@ -2,9 +2,12 @@
 	import { AppShell, Sidebar, TitleBar, WorkspaceGrid } from '$lib/components/layout';
 	import { PrimaryRail } from '$lib/components/chrome';
 	import { EditorRouter } from '$lib/features/editor';
+	import { Omnibar } from '$lib/features/omnibar';
+	import { StatusBar } from '$lib/features/status';
 	import { editorStore } from '$lib/stores/editor';
+	import { uiStore } from '$lib/stores/ui';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
-	import type { EditorState } from '$lib/types/store';
+	import type { EditorState, UiState } from '$lib/types/store';
 
 	let activeSection: Section | null = $state(null);
 	let sidebarOpen = $derived(activeSection !== null);
@@ -22,8 +25,31 @@
 		editorState = s;
 	});
 
+	// Subscribe to the UI store to track omnibar visibility.
+	let uiState: UiState = $state({
+		sidebarOpen: true,
+		sidebarSection: 'explorer',
+		omnibarOpen: false,
+		rightPanelOpen: false
+	});
+
+	uiStore.subscribe((s) => {
+		uiState = s;
+	});
+
 	function handleSectionChange(section: Section | null) {
 		activeSection = section;
+	}
+
+	function handleOmnibarClose() {
+		if (uiState.omnibarOpen) {
+			uiStore.toggleOmnibar();
+		}
+	}
+
+	function handleOmnibarSelect(path: string) {
+		// TODO: Wire to editor open flow once IPC is available.
+		console.log('[omnibar] selected:', path);
 	}
 </script>
 
@@ -64,10 +90,22 @@
 	</WorkspaceGrid>
 
 	{#snippet statusbar()}
-		<footer
-			class="flex h-6 shrink-0 items-center border-t border-surface-border bg-surface-base px-3"
-		>
-			<span class="text-xs text-text-muted">Ready</span>
-		</footer>
+		<div class="relative">
+			<StatusBar />
+			<!-- Temporary toggle: will be replaced by Ctrl+P shortcut in ticket 2.12 -->
+			<button
+				class="absolute right-20 top-0 z-raised flex h-6 items-center px-2 text-xs text-text-muted transition-colors hover:text-accent"
+				onclick={() => uiStore.toggleOmnibar()}
+				type="button"
+				aria-label="Toggle omnibar"
+			>
+				Ctrl+P
+			</button>
+		</div>
 	{/snippet}
 </AppShell>
+
+<!-- Omnibar overlay, rendered outside the AppShell so it floats above everything -->
+{#if uiState.omnibarOpen}
+	<Omnibar onclose={handleOmnibarClose} onselect={handleOmnibarSelect} />
+{/if}

@@ -35,7 +35,56 @@
 | QA-105 | Plugin capability prompt/enforcement | Required | Required | Requested capabilities shown and enforced |
 | QA-106 | Plugin runtime isolation | Required | Required | Faulted plugin is isolated without crashing host |
 
+## CI Quality Gates (Automated)
+
+All of the following are enforced by `.github/workflows/ci.yml` on every push to main/master and on every pull request:
+
+| Gate | Job | Command | Blocks merge on failure |
+|---|---|---|---|
+| Type checking | Frontend | `npm run check` | Yes |
+| ESLint | Frontend | `npm run lint` | Yes |
+| Prettier | Frontend | `npm run format:check` | Yes |
+| Frontend build | Frontend | `npm run build` | Yes |
+| Rust formatting | Rust | `cargo fmt --check` | Yes |
+| Clippy lint | Rust | `cargo clippy -- -D warnings` | Yes |
+| Rust tests | Rust | `cargo test` | Yes |
+
+## Backend Integration Test Coverage (Epic 1)
+
+The following cross-service integration tests run in CI via `cargo test`. They
+exercise end-to-end workflows without a Tauri runtime, using temporary
+workspaces with realistic content.
+
+| Test file | Test name | Services exercised | QA flow covered |
+|---|---|---|---|
+| `integration_workflows.rs` | `workflow_open_index_fuzzy_find` | WorkspaceFs, FileIndex, FuzzyFinder | QA-002, QA-005 |
+| `integration_workflows.rs` | `workflow_write_file_incremental_index_search` | WorkspaceFs, FileIndex, ContentSearcher, FuzzyFinder | QA-003, QA-005, QA-006 |
+| `integration_workflows.rs` | `workflow_tag_index_correct_counts` | FileIndex, TagIndex | QA-009 |
+| `integration_workflows.rs` | `workflow_link_graph_backlinks_resolve` | FileIndex, LinkGraph | QA-008 |
+| `integration_workflows.rs` | `workflow_workspace_status_assembly` | WorkspaceFs, FileIndex, TagIndex, metrics | QA-009 |
+| `integration_workflows.rs` | `workflow_file_lifecycle_index_consistency` | WorkspaceFs, FileIndex, ContentSearcher | QA-003 |
+| `integration_workflows.rs` | `workflow_tag_link_coherence_after_edit` | WorkspaceFs, FileIndex, TagIndex, LinkGraph | QA-003, QA-008, QA-009 |
+| `integration_workflows.rs` | `workflow_content_search_cross_directory` | FileIndex, ContentSearcher | QA-006 |
+| `integration_workflows.rs` | `workflow_git_status_after_workspace_changes` | WorkspaceFs, FileIndex, GitService, ContentSearcher | QA-003, QA-006, QA-007 |
+
+## Performance Budget Tests (Epic 1)
+
+Performance budget validation tests in `perf_budget.rs` measure hot-path
+latency against generous debug-build thresholds (10-20x release budget).
+They print timing data during `cargo test` for manual inspection.
+
+| Test name | Operation | Budget (release) | Threshold (debug) |
+|---|---|---|---|
+| `perf_full_scan_500_files` | FileIndex::full_scan | 1500 ms / 10k files | 5000 ms / 500 files |
+| `perf_fuzzy_find_latency` | FuzzyFinder::fuzzy_find | 80 ms | 1600 ms median |
+| `perf_content_search_latency` | ContentSearcher::search_content | 150 ms median | 3000 ms median |
+| `perf_tag_index_rebuild` | TagIndex::rebuild | (no explicit budget) | 500 ms |
+| `perf_link_graph_rebuild` | LinkGraph::rebuild | (no explicit budget) | 5000 ms |
+| `perf_git_hunks_latency` | GitService::get_hunks | 200 ms | 2000 ms |
+| `perf_full_workflow_open_to_search` | Full pipeline (scan+tags+links+search) | (composite) | 10000 ms |
+
 ## Regression Checklist per PR
+- CI quality gates pass (automated, see table above).
 - Lint/format checks pass.
 - Rust tests pass.
 - At least QA-001 through QA-007 manually verified for UI-affecting PRs.

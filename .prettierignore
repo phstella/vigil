@@ -1,0 +1,18 @@
+# Package
+node_modules/
+package-lock.json
+
+# Build output
+build/
+dist/
+.svelte-kit/
+
+# Tauri (managed separately)
+src-tauri/
+
+# Documentation and planning
+docs/
+vigil-plan/
+agents-prompts/
+README.md
+LICENSE

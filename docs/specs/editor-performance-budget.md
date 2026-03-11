@@ -34,15 +34,17 @@ Guarantee a desktop-native feel with no visible input lag.
 
 ## Instrumentation Requirements
 - Rust timers around:
-  - workspace scan
-  - fuzzy search
-  - content search
-  - git hunk computation
+  - workspace scan -- **Instrumented** (`FileIndex::full_scan`, `core::perf::PerfTimer`)
+  - fuzzy search -- **Instrumented** (`FuzzyFinder::fuzzy_find`)
+  - content search -- **Instrumented** (`ContentSearcher::search_content`)
+  - git hunk computation -- **Instrumented** (`GitService::get_hunks`)
 - Frontend timers around:
   - omnibar open and first paint
   - editor mount and first paint
   - pane switch render
 - Emit telemetry to local debug log file in development mode.
+  - Rust: `PerfTimer` logs to `stderr` in debug builds and when `VIGIL_PERF` env var is set.
+  - `perf::time_operation()` helper returns `(result, Duration)` for ad-hoc measurement.
 
 ## Optimization Priorities
 1. Avoid blocking UI thread on IPC calls.

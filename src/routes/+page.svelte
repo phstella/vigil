@@ -10,7 +10,9 @@
 	import { uiStore } from '$lib/stores/ui';
 	import { shortcutRegistry } from '$lib/utils';
 	import { noteStore } from '$lib/features/editor/note-store';
-	import { codeStore } from '$lib/features/editor/code-store';
+	import { codeStore, detectLanguage } from '$lib/features/editor/code-store';
+	import { readFile } from '$lib/ipc/files';
+	import { isMarkdownFile } from '$lib/utils/file-routing';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
 	import type { EditorState, SettingsState, UiState } from '$lib/types/store';
 
@@ -102,9 +104,14 @@
 		}
 	}
 
-	function handleOmnibarSelect(path: string) {
-		// TODO: Wire to editor open flow once IPC is available.
-		console.log('[omnibar] selected:', path);
+	async function handleOmnibarSelect(path: string) {
+		try {
+			const response = await readFile(path);
+			const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
+			editorStore.openFileRouted(path, response.content, language);
+		} catch (err) {
+			console.error('[omnibar] failed to open file:', path, err);
+		}
 	}
 
 	/** Save the active file via IPC (notes use write_file; code is placeholder). */

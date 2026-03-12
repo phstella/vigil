@@ -3,9 +3,9 @@
 	 * Omnibar -- Floating overlay for fuzzy file search.
 	 *
 	 * Renders a centered modal near the top of the viewport with a text
-	 * input and filtered results list. Keyboard navigation: ArrowUp/Down
-	 * move selection, Enter opens selected, Escape closes. Clicking the
-	 * backdrop also closes the overlay.
+	 * input and live fuzzy-find results from the backend. Keyboard navigation:
+	 * ArrowUp/Down move selection, Enter opens selected, Escape closes.
+	 * Clicking the backdrop also closes the overlay.
 	 */
 
 	import { omnibarStore } from './omnibar-store';
@@ -21,9 +21,10 @@
 
 	let inputEl: HTMLInputElement | undefined = $state();
 
-	/** Auto-focus the input whenever the component mounts. */
+	/** Auto-focus the input and trigger initial search when the component mounts. */
 	$effect(() => {
 		inputEl?.focus();
+		omnibarStore.initialize();
 	});
 
 	/** Reset the store when the component is destroyed. */
@@ -112,19 +113,26 @@
 				role="combobox"
 				aria-expanded="true"
 			/>
+			{#if omnibarStore.isLoading}
+				<span class="ml-2 text-xs text-text-muted" aria-live="polite">Searching...</span>
+			{/if}
 		</div>
 
 		<!-- Results list -->
 		<div id="omnibar-results" class="overflow-y-auto" role="listbox" aria-label="Search results">
-			{#each omnibarStore.results as item, i (item.id)}
-				<OmnibarItem
-					{item}
-					isSelected={i === omnibarStore.selectedIndex}
-					onclick={() => handleItemClick(item.path)}
-				/>
-			{:else}
+			{#if omnibarStore.error}
+				<div class="px-3 py-4 text-center text-sm text-red-400">{omnibarStore.error}</div>
+			{:else if omnibarStore.results.length > 0}
+				{#each omnibarStore.results as item, i (item.id)}
+					<OmnibarItem
+						{item}
+						isSelected={i === omnibarStore.selectedIndex}
+						onclick={() => handleItemClick(item.path)}
+					/>
+				{/each}
+			{:else if !omnibarStore.isLoading}
 				<div class="px-3 py-4 text-center text-sm text-text-muted">No matching files found.</div>
-			{/each}
+			{/if}
 		</div>
 	</div>
 </div>

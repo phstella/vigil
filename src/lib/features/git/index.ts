@@ -1,2 +1,8 @@
 // Barrel file for git feature.
-// Re-export git feature components and logic as they are created.
+export {
+	GutterController,
+	hunksToDecorations,
+	GUTTER_ADDED_CLASS,
+	GUTTER_MODIFIED_CLASS,
+	GUTTER_DELETED_CLASS
+} from './gutter';

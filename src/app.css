@@ -58,3 +58,30 @@ body {
 	margin: 0;
 	min-height: 100vh;
 }
+
+/* ---------------------------------------------------------------------------
+ * Git gutter markers (Task 3.8)
+ *
+ * Monaco glyph-margin decorations for added/modified/deleted lines.
+ * These classes are referenced by src/lib/features/git/gutter.ts.
+ * --------------------------------------------------------------------------- */
+
+.vigil-gutter-added {
+	background-color: var(--color-success);
+	border-radius: 1px;
+	margin-left: 4px;
+	width: 3px !important;
+}
+
+.vigil-gutter-modified {
+	background-color: var(--color-accent);
+	border-radius: 1px;
+	margin-left: 4px;
+	width: 3px !important;
+}
+
+.vigil-gutter-deleted {
+	border-left: 4px solid var(--color-error);
+	margin-left: 4px;
+	width: 0 !important;
+}

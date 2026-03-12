@@ -6,10 +6,15 @@
 	 * and syncs content/language with the code store. The editor container
 	 * auto-resizes via Monaco's `automaticLayout` option.
 	 *
+	 * Git gutter markers (Task 3.8): Shows added/modified/deleted line
+	 * indicators in the glyph margin. Refreshes on file open, content
+	 * edit (debounced), save, and backend `vigil://git-hunks` events.
+	 *
 	 * Performance targets (from editor-performance-budget.md):
 	 * - Keystroke-to-paint: <= 16 ms p95
 	 * - Scroll FPS: >= 60 FPS
 	 * - File switch: <= 120 ms
+	 * - Git hunk refresh: <= 200 ms for files under 5k lines
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
@@ -20,7 +25,10 @@
 		detectMonacoLanguage,
 		VIGIL_THEME_NAME
 	} from './monaco-config';
+	import { GutterController } from '$lib/features/git/gutter';
+	import { onGitHunks } from '$lib/ipc/events';
 	import type * as Monaco from 'monaco-editor';
+	import type { UnlistenFn } from '@tauri-apps/api/event';
 
 	let {
 		filePath,
@@ -38,6 +46,10 @@
 
 	// Track the last filePath we set up so we can detect file switches
 	let currentFilePath: string | null = null;
+
+	// Git gutter controller
+	let gutterController: GutterController | null = null;
+	let unlistenGitHunks: UnlistenFn | null = null;
 
 	// Sync incoming props into the local code store.
 	$effect(() => {
@@ -65,6 +77,9 @@
 				model.setValue(ct);
 			}
 			currentFilePath = fp;
+
+			// Update git gutter for the new file
+			gutterController?.setFilePath(fp);
 		}
 	});
 
@@ -88,10 +103,23 @@
 
 			currentFilePath = filePath;
 
-			// Sync content changes from Monaco back to the code store.
+			// Initialize git gutter controller
+			gutterController = new GutterController(editor);
+			gutterController.setFilePath(filePath);
+
+			// Subscribe to backend git hunk push events
+			unlistenGitHunks = await onGitHunks((payload) => {
+				if (payload.path === currentFilePath && gutterController) {
+					gutterController.applyHunks(payload.hunks);
+				}
+			});
+
+			// Sync content changes from Monaco back to the code store,
+			// and schedule a debounced git gutter refresh on edits.
 			editor.onDidChangeModelContent(() => {
 				const value = editor?.getValue() ?? '';
 				codeStore.updateContent(value);
+				gutterController?.scheduleRefresh();
 			});
 
 			isLoading = false;
@@ -103,6 +131,18 @@
 	});
 
 	onDestroy(() => {
+		// Clean up git gutter controller
+		if (gutterController) {
+			gutterController.dispose();
+			gutterController = null;
+		}
+
+		// Unsubscribe from git hunk events
+		if (unlistenGitHunks) {
+			unlistenGitHunks();
+			unlistenGitHunks = null;
+		}
+
 		if (editor) {
 			editor.dispose();
 			editor = null;

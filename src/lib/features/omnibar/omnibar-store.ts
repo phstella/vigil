@@ -67,7 +67,11 @@ export interface OmnibarContentResult {
 /** Union type for all omnibar results. */
 export type OmnibarResult = OmnibarFileResult | OmnibarContentResult;
 
-/** Debounce delay in milliseconds for file search IPC calls. */
+/**
+ * Debounce delay in milliseconds for file search IPC calls.
+ * Leading edge fires immediately on first keystroke; subsequent keystrokes
+ * within the window are debounced to avoid flooding the backend.
+ */
 const FILE_DEBOUNCE_MS = 80;
 
 /** Debounce delay in milliseconds for content search IPC calls. */
@@ -131,12 +135,19 @@ function createOmnibarStore() {
 	/** Monotonically increasing request ID to discard stale responses. */
 	let requestId = 0;
 
+	/**
+	 * Tracks whether we've already fired a leading-edge search in the current
+	 * debounce window. Reset to false when the debounce timer expires or is cleared.
+	 */
+	let leadingEdgeFired = false;
+
 	/** Clear any pending debounce timer. */
 	function clearDebounce() {
 		if (debounceTimer !== null) {
 			clearTimeout(debounceTimer);
 			debounceTimer = null;
 		}
+		leadingEdgeFired = false;
 	}
 
 	/** Execute a fuzzy find query against the backend. */
@@ -243,6 +254,10 @@ function createOmnibarStore() {
 		/**
 		 * Update the search query and trigger a debounced IPC call.
 		 * Empty queries in file mode fetch recent files; in content mode, clear results.
+		 *
+		 * Performance (Task 3.11): Uses leading-edge debounce for file mode --
+		 * the first keystroke fires immediately so the user sees results within
+		 * the 80ms budget, while subsequent rapid keystrokes are trailing-debounced.
 		 */
 		setQuery(value: string) {
 			query = value;
@@ -264,11 +279,31 @@ function createOmnibarStore() {
 				return;
 			}
 
-			// Debounce non-empty queries.
 			requestId++;
 			const rid = requestId;
+
+			// Leading-edge: fire immediately on first keystroke in file mode
+			// so results appear within the 80ms budget.
+			if (mode === 'file' && !leadingEdgeFired) {
+				leadingEdgeFired = true;
+				executeSearch(value, rid);
+				// Set a trailing timer to catch the final query after rapid typing
+				debounceTimer = setTimeout(() => {
+					debounceTimer = null;
+					leadingEdgeFired = false;
+					// Only re-fire if the query changed since the leading call
+					if (query !== value) {
+						requestId++;
+						executeSearch(query, requestId);
+					}
+				}, getDebounceMs());
+				return;
+			}
+
+			// Trailing-edge debounce for subsequent keystrokes and content mode.
 			debounceTimer = setTimeout(() => {
 				debounceTimer = null;
+				leadingEdgeFired = false;
 				executeSearch(value, rid);
 			}, getDebounceMs());
 		},

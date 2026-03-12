@@ -11,6 +11,7 @@
 
 	import { omnibarStore } from './omnibar-store';
 	import OmnibarItem from './OmnibarItem.svelte';
+	import { perfTimer } from '$lib/utils/perf';
 	import type { OmnibarMode } from '$lib/types/store';
 
 	let {
@@ -25,10 +26,17 @@
 
 	let inputEl: HTMLInputElement | undefined = $state();
 
+	/** Perf timer: measures time from omnibar open to first paint. */
+	const openTimer = perfTimer('omnibar-open', 80);
+
 	/** Auto-focus the input and trigger initial search when the component mounts. */
 	$effect(() => {
 		inputEl?.focus();
 		omnibarStore.initialize(initialMode);
+		// Measure first paint after mount
+		queueMicrotask(() => {
+			openTimer.stop();
+		});
 	});
 
 	/** Reset the store when the component is destroyed. */

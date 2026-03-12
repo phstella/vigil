@@ -9,3 +9,5 @@ export {
 	getFileExtension
 } from './file-routing';
 export type { EditorPane } from './file-routing';
+export { perfTimer, timeAsync, timeSync } from './perf';
+export type { PerfTimer } from './perf';

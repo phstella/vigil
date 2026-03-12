@@ -27,6 +27,7 @@
 	} from './monaco-config';
 	import { GutterController } from '$lib/features/git/gutter';
 	import { onGitHunks } from '$lib/ipc/events';
+	import { perfTimer } from '$lib/utils/perf';
 	import type * as Monaco from 'monaco-editor';
 	import type { UnlistenFn } from '@tauri-apps/api/event';
 
@@ -85,6 +86,7 @@
 
 	onMount(async () => {
 		if (!containerEl) return;
+		const mountTimer = perfTimer('editor-mount', 120);
 
 		try {
 			monacoRef = await loadMonaco();
@@ -123,10 +125,12 @@
 			});
 
 			isLoading = false;
+			mountTimer.stop();
 		} catch (err) {
 			console.error('[CodeEditor] Failed to load Monaco:', err);
 			loadError = err instanceof Error ? err.message : 'Failed to load editor';
 			isLoading = false;
+			mountTimer.stop();
 		}
 	});
 

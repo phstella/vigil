@@ -8,11 +8,16 @@
 	 * - `"auto"` (default): routes `.md` to NoteEditor, everything else to CodeEditor.
 	 *
 	 * When no file is selected, displays an empty-state message.
+	 *
+	 * Performance (Task 3.11):
+	 * - CodeEditor is dynamically imported so Monaco's ~2 MB bundle is not
+	 *   included in the initial route chunk, improving cold-start time.
+	 * - Pane switch render is instrumented with a perf timer.
 	 */
 
 	import NoteEditor from './NoteEditor.svelte';
-	import CodeEditor from './CodeEditor.svelte';
 	import { isMarkdownFile } from '$lib/utils/file-routing';
+	import { perfTimer } from '$lib/utils/perf';
 
 	let {
 		filePath = null,
@@ -35,12 +40,37 @@
 			((pane === 'code' && !isMarkdownFile(filePath)) ||
 				(pane === 'auto' && !isMarkdownFile(filePath)))
 	);
+
+	// Lazy-load CodeEditor component to keep Monaco out of the initial bundle.
+	// The promise is created once and cached by the module system.
+	const CodeEditorModule = import('./CodeEditor.svelte');
+
+	// Instrument pane switch rendering
+	$effect(() => {
+		if (filePath != null) {
+			const timer = perfTimer('pane-switch-render', 120);
+			// Use microtask to measure after Svelte renders the new pane
+			queueMicrotask(() => {
+				timer.stop();
+			});
+		}
+	});
 </script>
 
 {#if shouldRenderNote}
 	<NoteEditor filePath={filePath!} {content} />
 {:else if shouldRenderCode}
-	<CodeEditor filePath={filePath!} {content} />
+	{#await CodeEditorModule}
+		<div class="flex h-full items-center justify-center bg-surface-base">
+			<span class="text-sm text-text-muted">Loading editor...</span>
+		</div>
+	{:then mod}
+		<mod.default filePath={filePath!} {content} />
+	{:catch}
+		<div class="flex h-full items-center justify-center bg-surface-base">
+			<span class="text-sm text-error">Failed to load code editor</span>
+		</div>
+	{/await}
 {:else}
 	<div class="flex h-full items-center justify-center bg-surface-base p-4">
 		<div class="text-center">

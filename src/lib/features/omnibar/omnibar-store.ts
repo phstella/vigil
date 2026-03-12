@@ -4,15 +4,24 @@
  * Manages the search query, live fuzzy-find results from the backend,
  * and keyboard selection index for the floating omnibar overlay.
  *
- * Calls the `fuzzy_find` IPC command with debouncing to meet the
- * <=80 ms first-result-render performance budget.
+ * Supports two modes:
+ * - **file**: fuzzy filename search via `fuzzy_find` IPC (Ctrl+P)
+ * - **content**: phrase/snippet search via `search_content` IPC (Ctrl+Shift+F)
+ *
+ * Calls the appropriate IPC command with debouncing to meet performance budgets:
+ * - File mode: <=80 ms first-result-render
+ * - Content mode: <=150 ms median result render
  */
 
-import { fuzzyFind } from '$lib/ipc/search';
+import { fuzzyFind, searchContent } from '$lib/ipc/search';
 import { isVigilError } from '$lib/ipc/tauri';
-import type { FuzzyMatch } from '$lib/types/ipc';
+import type { FuzzyMatch, ContentMatch } from '$lib/types/ipc';
+import type { OmnibarMode } from '$lib/types/store';
 
-export interface OmnibarResult {
+/** Result from file (fuzzy) search mode. */
+export interface OmnibarFileResult {
+	/** Discriminant tag. */
+	type: 'file';
 	/** Unique identifier for the result item. */
 	id: string;
 	/** Display name (file name). */
@@ -31,21 +40,52 @@ export interface OmnibarResult {
 	kind: 'file' | 'dir';
 }
 
-/** Debounce delay in milliseconds for IPC calls. */
-const DEBOUNCE_MS = 80;
+/** Result from content (phrase/snippet) search mode. */
+export interface OmnibarContentResult {
+	/** Discriminant tag. */
+	type: 'content';
+	/** Unique identifier for the result item. */
+	id: string;
+	/** Workspace-relative file path. */
+	path: string;
+	/** File name extracted from path. */
+	name: string;
+	/** File extension without the leading dot, or null. */
+	ext: string | null;
+	/** 1-based line number of the match. */
+	lineNumber: number;
+	/** Start column of the match within the line. */
+	lineStartCol: number;
+	/** End column of the match within the line. */
+	lineEndCol: number;
+	/** Context line(s) around the match. */
+	preview: string;
+	/** Relevance score (higher is better). */
+	score: number;
+}
+
+/** Union type for all omnibar results. */
+export type OmnibarResult = OmnibarFileResult | OmnibarContentResult;
+
+/** Debounce delay in milliseconds for file search IPC calls. */
+const FILE_DEBOUNCE_MS = 80;
+
+/** Debounce delay in milliseconds for content search IPC calls. */
+const CONTENT_DEBOUNCE_MS = 150;
 
 /** Maximum results to request from the backend. */
 const MAX_RESULTS = 50;
 
-/** Convert a FuzzyMatch from the backend into an OmnibarResult. */
-function toOmnibarResult(match: FuzzyMatch, index: number): OmnibarResult {
+/** Convert a FuzzyMatch from the backend into an OmnibarFileResult. */
+function toFileResult(match: FuzzyMatch, index: number): OmnibarFileResult {
 	const segments = match.path.split('/');
 	const fileName = segments[segments.length - 1] ?? match.display;
 	const dotIdx = fileName.lastIndexOf('.');
 	const ext = dotIdx > 0 ? fileName.slice(dotIdx + 1).toLowerCase() : null;
 
 	return {
-		id: `${match.path}-${index}`,
+		type: 'file',
+		id: `file-${match.path}-${index}`,
 		name: fileName,
 		path: match.path,
 		ext,
@@ -56,8 +96,30 @@ function toOmnibarResult(match: FuzzyMatch, index: number): OmnibarResult {
 	};
 }
 
+/** Convert a ContentMatch from the backend into an OmnibarContentResult. */
+function toContentResult(match: ContentMatch, index: number): OmnibarContentResult {
+	const segments = match.path.split('/');
+	const fileName = segments[segments.length - 1] ?? match.path;
+	const dotIdx = fileName.lastIndexOf('.');
+	const ext = dotIdx > 0 ? fileName.slice(dotIdx + 1).toLowerCase() : null;
+
+	return {
+		type: 'content',
+		id: `content-${match.path}-${match.line_number}-${index}`,
+		path: match.path,
+		name: fileName,
+		ext,
+		lineNumber: match.line_number,
+		lineStartCol: match.line_start_col,
+		lineEndCol: match.line_end_col,
+		preview: match.preview,
+		score: match.score
+	};
+}
+
 function createOmnibarStore() {
 	let query = $state('');
+	let mode = $state<OmnibarMode>('file');
 	let selectedIndex = $state(0);
 	let results = $state<OmnibarResult[]>([]);
 	let isLoading = $state(false);
@@ -78,7 +140,7 @@ function createOmnibarStore() {
 	}
 
 	/** Execute a fuzzy find query against the backend. */
-	async function executeSearch(q: string, rid: number): Promise<void> {
+	async function executeFileSearch(q: string, rid: number): Promise<void> {
 		isLoading = true;
 		error = null;
 
@@ -87,7 +149,7 @@ function createOmnibarStore() {
 			// Discard stale responses if a newer query was issued.
 			if (rid !== requestId) return;
 
-			results = response.matches.map(toOmnibarResult);
+			results = response.matches.map(toFileResult);
 			selectedIndex = 0;
 		} catch (err: unknown) {
 			// Discard stale error responses.
@@ -111,9 +173,59 @@ function createOmnibarStore() {
 		}
 	}
 
+	/** Execute a content search query against the backend. */
+	async function executeContentSearch(q: string, rid: number): Promise<void> {
+		isLoading = true;
+		error = null;
+
+		try {
+			const response = await searchContent(q, MAX_RESULTS);
+			// Discard stale responses if a newer query was issued.
+			if (rid !== requestId) return;
+
+			results = response.matches.map(toContentResult);
+			selectedIndex = 0;
+		} catch (err: unknown) {
+			// Discard stale error responses.
+			if (rid !== requestId) return;
+
+			if (isVigilError(err)) {
+				if (err.code === 'INDEX_UNAVAILABLE' || err.code === 'WORKSPACE_NOT_OPEN') {
+					error = null;
+					results = [];
+				} else {
+					error = err.message;
+				}
+			} else {
+				error = 'Content search failed';
+			}
+		} finally {
+			if (rid === requestId) {
+				isLoading = false;
+			}
+		}
+	}
+
+	/** Execute a search using the appropriate backend based on current mode. */
+	function executeSearch(q: string, rid: number): void {
+		if (mode === 'content') {
+			void executeContentSearch(q, rid);
+		} else {
+			void executeFileSearch(q, rid);
+		}
+	}
+
+	/** Get the appropriate debounce delay for the current mode. */
+	function getDebounceMs(): number {
+		return mode === 'content' ? CONTENT_DEBOUNCE_MS : FILE_DEBOUNCE_MS;
+	}
+
 	return {
 		get query() {
 			return query;
+		},
+		get mode(): OmnibarMode {
+			return mode;
 		},
 		get selectedIndex() {
 			return selectedIndex;
@@ -130,7 +242,7 @@ function createOmnibarStore() {
 
 		/**
 		 * Update the search query and trigger a debounced IPC call.
-		 * Empty queries clear the results immediately.
+		 * Empty queries in file mode fetch recent files; in content mode, clear results.
 		 */
 		setQuery(value: string) {
 			query = value;
@@ -138,10 +250,17 @@ function createOmnibarStore() {
 			clearDebounce();
 
 			if (value.trim() === '') {
-				// For empty query, still call backend (returns recent files per spec).
-				requestId++;
-				const rid = requestId;
-				void executeSearch('', rid);
+				if (mode === 'file') {
+					// For empty query in file mode, still call backend (returns recent files per spec).
+					requestId++;
+					const rid = requestId;
+					void executeFileSearch('', rid);
+				} else {
+					// Content search requires a non-empty query.
+					results = [];
+					isLoading = false;
+					error = null;
+				}
 				return;
 			}
 
@@ -150,15 +269,41 @@ function createOmnibarStore() {
 			const rid = requestId;
 			debounceTimer = setTimeout(() => {
 				debounceTimer = null;
-				void executeSearch(value, rid);
-			}, DEBOUNCE_MS);
+				executeSearch(value, rid);
+			}, getDebounceMs());
 		},
 
-		/** Trigger an initial search when the omnibar opens (empty query = recent files). */
-		initialize() {
-			requestId++;
-			const rid = requestId;
-			void executeSearch('', rid);
+		/**
+		 * Switch the omnibar search mode.
+		 * Clears current results and re-runs the search with the current query.
+		 */
+		setMode(newMode: OmnibarMode) {
+			if (mode === newMode) return;
+			mode = newMode;
+			clearDebounce();
+			results = [];
+			selectedIndex = 0;
+
+			// Re-execute with current query in the new mode.
+			if (query.trim() === '' && newMode === 'file') {
+				requestId++;
+				const rid = requestId;
+				void executeFileSearch('', rid);
+			} else if (query.trim() !== '') {
+				requestId++;
+				const rid = requestId;
+				executeSearch(query, rid);
+			}
+		},
+
+		/** Trigger an initial search when the omnibar opens. */
+		initialize(initialMode: OmnibarMode = 'file') {
+			mode = initialMode;
+			if (initialMode === 'file') {
+				requestId++;
+				const rid = requestId;
+				void executeFileSearch('', rid);
+			}
 		},
 
 		/** Move selection to the next result, wrapping at the end. */
@@ -184,6 +329,7 @@ function createOmnibarStore() {
 			clearDebounce();
 			requestId++;
 			query = '';
+			mode = 'file';
 			selectedIndex = 0;
 			results = [];
 			isLoading = false;

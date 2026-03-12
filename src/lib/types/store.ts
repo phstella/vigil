@@ -126,6 +126,9 @@ export interface SettingsState {
 /** Sidebar panel identifiers. */
 export type SidebarSection = 'explorer' | 'search' | 'graph' | 'tags';
 
+/** Omnibar search mode. */
+export type OmnibarMode = 'file' | 'content';
+
 export interface UiState {
 	/** Whether the sidebar is visible. */
 	sidebarOpen: boolean;
@@ -133,6 +136,8 @@ export interface UiState {
 	sidebarSection: SidebarSection;
 	/** Whether the omnibar overlay is open. */
 	omnibarOpen: boolean;
+	/** Active omnibar search mode. */
+	omnibarMode: OmnibarMode;
 	/** Whether the right (code) panel is visible. */
 	rightPanelOpen: boolean;
 }

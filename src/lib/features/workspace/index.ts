@@ -1,2 +1,2 @@
 // Barrel file for workspace feature.
-// Re-export workspace feature components and logic as they are created.
+export { initFileWatcher, teardownFileWatcher } from './file-watcher';

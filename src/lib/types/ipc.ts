@@ -246,3 +246,8 @@ export interface GitHunksPayload extends EventMeta {
 export interface StatusUpdatedPayload extends EventMeta {
 	status: WorkspaceStatus;
 }
+
+export interface FsRenamedPayload extends EventMeta {
+	old_path: string;
+	new_path: string;
+}

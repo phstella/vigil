@@ -70,6 +70,8 @@ export interface EditorState {
 	codeContent: string;
 	/** Detected language of the active code file. */
 	codeLanguage: string;
+	/** Paths of open files that have been changed on disk (conflict detection). */
+	conflictFiles: Set<string>;
 }
 
 // ---------------------------------------------------------------------------

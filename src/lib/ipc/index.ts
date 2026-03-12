@@ -25,5 +25,6 @@ export {
 	onIndexUpdated,
 	onIndexReady,
 	onGitHunks,
-	onStatusUpdated
+	onStatusUpdated,
+	onFsRenamed
 } from './events';

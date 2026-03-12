@@ -7,6 +7,10 @@
  */
 
 import type { DirEntry } from '$lib/types/store';
+import { editorStore } from '$lib/stores/editor';
+import { isMarkdownFile } from '$lib/utils/file-routing';
+import { detectLanguage } from '$lib/features/editor/code-store';
+import { uiStore } from '$lib/stores/ui';
 
 /** A tree node extends DirEntry with optional children for recursive rendering. */
 export interface TreeNode extends DirEntry {
@@ -167,9 +171,22 @@ function createExplorerStore() {
 			expandedDirs = next;
 		},
 
-		/** Select a file by path. */
+		/** Select a file by path and open it in the appropriate editor pane. */
 		selectFile(path: string) {
 			selectedFile = path;
+
+			// Route to the correct editor pane.
+			// Content is a placeholder until real IPC is wired (task 3.5+).
+			const language = detectLanguage(path);
+			const mockContent = isMarkdownFile(path)
+				? `# ${path.split('/').pop()?.replace(/\.md$/, '') ?? 'Untitled'}\n\nStart writing...`
+				: `// ${path.split('/').pop() ?? 'file'}\n`;
+			editorStore.openFile(path, mockContent, language);
+
+			// Show the right panel when opening a code file
+			if (!isMarkdownFile(path)) {
+				uiStore.openRightPanel();
+			}
 		},
 
 		/** Check if a directory is expanded. */

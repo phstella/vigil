@@ -60,6 +60,16 @@ export interface EditorState {
 	content: string;
 	/** Detected language / syntax mode of the active file. */
 	language: string;
+	/** Workspace-relative path of the active note (.md) in center pane, or null. */
+	noteFile: string | null;
+	/** Content of the active note file. */
+	noteContent: string;
+	/** Workspace-relative path of the active code file in right pane, or null. */
+	codeFile: string | null;
+	/** Content of the active code file. */
+	codeContent: string;
+	/** Detected language of the active code file. */
+	codeLanguage: string;
 }
 
 // ---------------------------------------------------------------------------

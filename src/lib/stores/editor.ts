@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import type { EditorState, OpenFile } from '$lib/types/store';
+import { isMarkdownFile } from '$lib/utils/file-routing';
 
 function createEditorStore() {
 	const { subscribe, update, set } = writable<EditorState>({
@@ -7,7 +8,12 @@ function createEditorStore() {
 		openFiles: [],
 		isDirty: false,
 		content: '',
-		language: 'plaintext'
+		language: 'plaintext',
+		noteFile: null,
+		noteContent: '',
+		codeFile: null,
+		codeContent: '',
+		codeLanguage: 'plaintext'
 	});
 
 	return {
@@ -22,7 +28,7 @@ function createEditorStore() {
 					? s.openFiles
 					: [...s.openFiles, { path, isDirty: false, language }];
 
-				return {
+				const base = {
 					...s,
 					activeFile: path,
 					openFiles,
@@ -30,7 +36,32 @@ function createEditorStore() {
 					content,
 					language
 				};
+
+				// Route to the correct pane based on file type
+				if (isMarkdownFile(path)) {
+					return {
+						...base,
+						noteFile: path,
+						noteContent: content
+					};
+				} else {
+					return {
+						...base,
+						codeFile: path,
+						codeContent: content,
+						codeLanguage: language
+					};
+				}
 			});
+		},
+
+		/**
+		 * Open a file with automatic pane routing.
+		 * .md files go to the center note pane; code files go to the right code pane.
+		 * This is the primary entry point for file-type routing (task 3.4).
+		 */
+		openFileRouted(path: string, content: string, language: string) {
+			this.openFile(path, content, language);
 		},
 
 		/** Close a file tab. If it was active, activate an adjacent tab or clear. */
@@ -61,7 +92,19 @@ function createEditorStore() {
 					}
 				}
 
-				return { ...s, activeFile, openFiles, content, language, isDirty };
+				// Clear the appropriate pane if its file was closed
+				const result = { ...s, activeFile, openFiles, content, language, isDirty };
+				if (isMarkdownFile(path) && s.noteFile === path) {
+					result.noteFile = null;
+					result.noteContent = '';
+				}
+				if (!isMarkdownFile(path) && s.codeFile === path) {
+					result.codeFile = null;
+					result.codeContent = '';
+					result.codeLanguage = 'plaintext';
+				}
+
+				return result;
 			});
 		},
 

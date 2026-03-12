@@ -41,6 +41,16 @@ function createUiStore() {
 		/** Toggle the right (code) panel. */
 		toggleRightPanel() {
 			update((s) => ({ ...s, rightPanelOpen: !s.rightPanelOpen }));
+		},
+
+		/** Open the right (code) panel. */
+		openRightPanel() {
+			update((s) => ({ ...s, rightPanelOpen: true }));
+		},
+
+		/** Close the right (code) panel. */
+		closeRightPanel() {
+			update((s) => ({ ...s, rightPanelOpen: false }));
 		}
 	};
 }

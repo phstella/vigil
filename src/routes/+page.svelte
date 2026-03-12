@@ -5,6 +5,7 @@
 	import { EditorRouter } from '$lib/features/editor';
 	import { Omnibar } from '$lib/features/omnibar';
 	import { StatusBar } from '$lib/features/status';
+	import { initFileWatcher, teardownFileWatcher } from '$lib/features/workspace';
 	import { editorStore } from '$lib/stores/editor';
 	import { settingsStore } from '$lib/stores/settings';
 	import { uiStore } from '$lib/stores/ui';
@@ -22,7 +23,8 @@
 		openFiles: [],
 		isDirty: false,
 		content: '',
-		language: 'plaintext'
+		language: 'plaintext',
+		conflictFiles: new Set<string>()
 	});
 
 	// Subscribe to the UI store to track omnibar visibility.
@@ -147,6 +149,11 @@
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
 		window.addEventListener('keydown', handleActivity, { capture: true });
 		scheduleSidebarAutoHide();
+
+		// Wire file-watcher events from Rust backend to UI stores
+		initFileWatcher().catch((err) => {
+			console.error('[vigil] failed to initialize file watcher listeners:', err);
+		});
 	});
 
 	onDestroy(() => {
@@ -159,6 +166,9 @@
 		window.removeEventListener('mousedown', handleActivity, { capture: true });
 		window.removeEventListener('keydown', handleActivity, { capture: true });
 		clearSidebarAutoHideTimer();
+
+		// Tear down file-watcher event subscriptions
+		teardownFileWatcher();
 
 		cleanupEditorSubscription?.();
 		cleanupUiSubscription?.();

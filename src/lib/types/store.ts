@@ -60,6 +60,8 @@ export interface EditorState {
 	content: string;
 	/** Detected language / syntax mode of the active file. */
 	language: string;
+	/** Paths of open files that have been changed on disk (conflict detection). */
+	conflictFiles: Set<string>;
 }
 
 // ---------------------------------------------------------------------------

@@ -51,5 +51,6 @@ export type {
 	IndexUpdatedPayload,
 	IndexReadyPayload,
 	GitHunksPayload,
-	StatusUpdatedPayload
+	StatusUpdatedPayload,
+	FsRenamedPayload
 } from './ipc';

@@ -38,6 +38,50 @@ function createFilesStore() {
 				}
 				return { ...s, expandedDirs: next };
 			});
+		},
+
+		/**
+		 * Invalidate cached entries for a given path.
+		 * Removes matching entries from fileTree (parent dir must be re-fetched).
+		 * Called when the backend emits index-updated with deleted/changed paths.
+		 */
+		invalidatePath(path: string) {
+			update((s) => ({
+				...s,
+				fileTree: s.fileTree.filter((e) => e.path !== path)
+			}));
+		},
+
+		/**
+		 * Mark a directory as needing refresh by collapsing and re-expanding it.
+		 * This signals the explorer to re-fetch its contents.
+		 */
+		markDirDirty(dirPath: string) {
+			update((s) => {
+				const next = new Set(s.expandedDirs);
+				// Force removal so next expand triggers a fresh list_dir
+				next.delete(dirPath);
+				return { ...s, expandedDirs: next };
+			});
+		},
+
+		/**
+		 * Handle a file rename: update any tree entries whose path matches
+		 * the old path to use the new path.
+		 */
+		handleRename(oldPath: string, newPath: string) {
+			update((s) => ({
+				...s,
+				fileTree: s.fileTree.map((e) => {
+					if (e.path === oldPath) {
+						const name = newPath.split('/').pop() ?? e.name;
+						const dot = name.lastIndexOf('.');
+						const ext = dot >= 0 ? name.slice(dot + 1) : null;
+						return { ...e, path: newPath, name, ext };
+					}
+					return e;
+				})
+			}));
 		}
 	};
 }

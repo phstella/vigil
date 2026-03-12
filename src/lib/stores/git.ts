@@ -34,6 +34,28 @@ function createGitStore() {
 		/** Replace the full list of status entries. */
 		updateStatus(entries: GitStatusEntry[]) {
 			update((s) => ({ ...s, statusEntries: entries }));
+		},
+
+		/** Remove cached hunks for a specific file (e.g. on deletion). */
+		invalidateHunks(path: string) {
+			update((s) => {
+				const next = new Map(s.hunks);
+				next.delete(path);
+				return { ...s, hunks: next };
+			});
+		},
+
+		/** Handle a file rename: move cached hunks from old to new path. */
+		handleRename(oldPath: string, newPath: string) {
+			update((s) => {
+				const next = new Map(s.hunks);
+				const oldHunks = next.get(oldPath);
+				if (oldHunks) {
+					next.delete(oldPath);
+					next.set(newPath, oldHunks);
+				}
+				return { ...s, hunks: next };
+			});
 		}
 	};
 }

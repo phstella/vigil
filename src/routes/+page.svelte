@@ -22,7 +22,12 @@
 		openFiles: [],
 		isDirty: false,
 		content: '',
-		language: 'plaintext'
+		language: 'plaintext',
+		noteFile: null,
+		noteContent: '',
+		codeFile: null,
+		codeContent: '',
+		codeLanguage: 'plaintext'
 	});
 
 	// Subscribe to the UI store to track omnibar visibility.
@@ -122,6 +127,11 @@
 		console.log('[shortcut] create new note');
 	}
 
+	// Derive whether the right panel should show based on whether a code file is open
+	let showRightPanel = $derived(
+		uiState.rightPanelOpen || editorState.codeFile !== null
+	);
+
 	onMount(() => {
 		cleanupEditorSubscription = editorStore.subscribe((s) => {
 			editorState = s;
@@ -195,19 +205,20 @@
 		{/snippet}
 
 		{#snippet rightPanel()}
-			<EditorRouter
-				filePath={editorState.activeFile && !editorState.activeFile.endsWith('.md')
-					? editorState.activeFile
-					: null}
-				content={editorState.activeFile && !editorState.activeFile.endsWith('.md')
-					? editorState.content
-					: ''}
-			/>
+			{#if showRightPanel}
+				<EditorRouter
+					filePath={editorState.codeFile}
+					content={editorState.codeContent}
+					pane="code"
+				/>
+			{/if}
 		{/snippet}
 
+		<!-- Center pane: note editor for .md files -->
 		<EditorRouter
-			filePath={editorState.activeFile?.endsWith('.md') ? editorState.activeFile : null}
-			content={editorState.activeFile?.endsWith('.md') ? editorState.content : ''}
+			filePath={editorState.noteFile}
+			content={editorState.noteContent}
+			pane="note"
 		/>
 	</WorkspaceGrid>
 

@@ -141,6 +141,7 @@
 		shortcutRegistry.register('ctrl+s', saveCurrentFile, { global: true });
 		shortcutRegistry.register('ctrl+b', () => uiStore.toggleSidebar(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
+		shortcutRegistry.register('ctrl+.', () => noteStore.toggleViewMode(), { global: true });
 
 		window.addEventListener('mousemove', handleActivity, { capture: true, passive: true });
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
@@ -153,6 +154,7 @@
 		shortcutRegistry.unregister('ctrl+s');
 		shortcutRegistry.unregister('ctrl+b');
 		shortcutRegistry.unregister('ctrl+n');
+		shortcutRegistry.unregister('ctrl+.');
 
 		window.removeEventListener('mousemove', handleActivity, { capture: true });
 		window.removeEventListener('mousedown', handleActivity, { capture: true });

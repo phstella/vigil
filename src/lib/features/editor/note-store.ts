@@ -2,8 +2,8 @@
  * Note editor UI state store with IPC-backed open/save/autosave lifecycle.
  *
  * Tracks the active markdown file path, content buffer, dirty state, etag
- * for optimistic concurrency, and an autosave timer that debounces writes
- * after the user stops typing.
+ * for optimistic concurrency, an autosave timer that debounces writes
+ * after the user stops typing, and view mode (edit vs preview toggle via Ctrl+.).
  */
 
 import { readFile, writeFile } from '$lib/ipc/files';
@@ -11,6 +11,9 @@ import { isVigilError } from '$lib/ipc/tauri';
 
 /** Autosave debounce delay in milliseconds. */
 const AUTOSAVE_DELAY_MS = 2000;
+
+/** View mode for the markdown editor. */
+export type NoteViewMode = 'edit' | 'preview';
 
 export interface NoteEditorState {
 	/** Workspace-relative path of the active note, or null. */
@@ -23,6 +26,8 @@ export interface NoteEditorState {
 	isSaving: boolean;
 	/** Last error message from a save attempt, or null. */
 	lastError: string | null;
+	/** Current view mode: 'edit' for raw markdown, 'preview' for rendered. */
+	viewMode: NoteViewMode;
 }
 
 function createNoteStore() {
@@ -31,6 +36,7 @@ function createNoteStore() {
 	let isDirty = $state(false);
 	let isSaving = $state(false);
 	let lastError = $state<string | null>(null);
+	let viewMode = $state<NoteViewMode>('edit');
 
 	/** Content hash (etag) from the last read or successful write. */
 	let etag: string | null = null;
@@ -99,6 +105,9 @@ function createNoteStore() {
 		get lastError() {
 			return lastError;
 		},
+		get viewMode() {
+			return viewMode;
+		},
 
 		/**
 		 * Open a markdown file by reading it from the backend.
@@ -166,6 +175,16 @@ function createNoteStore() {
 			clearAutosave();
 		},
 
+		/** Toggle between edit and preview view modes. */
+		toggleViewMode() {
+			viewMode = viewMode === 'edit' ? 'preview' : 'edit';
+		},
+
+		/** Set the view mode explicitly. */
+		setViewMode(mode: NoteViewMode) {
+			viewMode = mode;
+		},
+
 		/** Reset the store to its initial empty state. */
 		reset() {
 			clearAutosave();
@@ -175,6 +194,7 @@ function createNoteStore() {
 			isDirty = false;
 			isSaving = false;
 			lastError = null;
+			viewMode = 'edit';
 		},
 
 		/** Cancel any pending autosave (e.g., on component teardown). */

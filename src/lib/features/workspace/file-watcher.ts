@@ -23,6 +23,7 @@ import { filesStore } from '$lib/stores/files';
 import { editorStore } from '$lib/stores/editor';
 import { gitStore } from '$lib/stores/git';
 import { statusStore } from '$lib/features/status/status-store';
+import { explorerStore } from '$lib/features/explorer/explorer-store';
 import type {
 	IndexUpdatedPayload,
 	IndexReadyPayload,
@@ -61,6 +62,8 @@ function handleIndexUpdated(payload: IndexUpdatedPayload): void {
 					filesStore.markDirDirty(parentDir);
 					refreshedDirs.add(parentDir);
 				}
+				// Bridge to visible explorer tree
+				void explorerStore.handleIndexChange(change.path, 'created');
 				break;
 
 			case 'changed':
@@ -71,6 +74,8 @@ function handleIndexUpdated(payload: IndexUpdatedPayload): void {
 					filesStore.markDirDirty(parentDir);
 					refreshedDirs.add(parentDir);
 				}
+				// Bridge to visible explorer tree
+				void explorerStore.handleIndexChange(change.path, 'changed');
 				break;
 
 			case 'deleted':
@@ -81,6 +86,8 @@ function handleIndexUpdated(payload: IndexUpdatedPayload): void {
 					filesStore.markDirDirty(parentDir);
 					refreshedDirs.add(parentDir);
 				}
+				// Bridge to visible explorer tree
+				void explorerStore.handleIndexChange(change.path, 'deleted');
 				break;
 		}
 	}
@@ -118,6 +125,8 @@ function handleFsRenamed(payload: FsRenamedPayload): void {
 	editorStore.handleRename(payload.old_path, payload.new_path);
 	filesStore.handleRename(payload.old_path, payload.new_path);
 	gitStore.handleRename(payload.old_path, payload.new_path);
+	// Bridge to visible explorer tree
+	explorerStore.handleRename(payload.old_path, payload.new_path);
 }
 
 // ---------------------------------------------------------------------------

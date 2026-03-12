@@ -114,10 +114,14 @@ function createNoteStore() {
 		 * Replaces the current buffer entirely.
 		 */
 		async open(path: string): Promise<boolean> {
-			// If switching files while dirty, attempt to save the current one first.
+			// If switching files while dirty, save the current one first.
+			// Block the switch if save fails to prevent data loss.
 			if (filePath && isDirty && filePath !== path) {
 				clearAutosave();
-				await performSave();
+				const saved = await performSave();
+				if (!saved) {
+					return false;
+				}
 			}
 
 			clearAutosave();

@@ -50,8 +50,12 @@
 			loadedPath = filePath;
 			// Open via IPC to get etag for optimistic concurrency.
 			// Fall back to direct load if IPC is unavailable (dev/test).
-			noteStore.open(filePath).catch(() => {
-				noteStore.load(filePath, content);
+			const targetPath = filePath;
+			const fallbackContent = content;
+			noteStore.open(targetPath).then((success) => {
+				if (!success) {
+					noteStore.load(targetPath, fallbackContent);
+				}
 			});
 			// Update backlinks for the new file
 			void linksStore.setActivePath(filePath);

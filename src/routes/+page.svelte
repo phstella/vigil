@@ -6,14 +6,14 @@
 	import { Omnibar } from '$lib/features/omnibar';
 	import { StatusBar } from '$lib/features/status';
 	import { statusStore } from '$lib/features/status/status-store';
-	import { initFileWatcher, teardownFileWatcher } from '$lib/features/workspace';
+	import { initFileWatcher, teardownFileWatcher, openAndLoadWorkspace } from '$lib/features/workspace';
 	import { editorStore } from '$lib/stores/editor';
 	import { settingsStore } from '$lib/stores/settings';
 	import { uiStore } from '$lib/stores/ui';
 	import { shortcutRegistry } from '$lib/utils';
 	import { noteStore } from '$lib/features/editor/note-store';
 	import { codeStore, detectLanguage } from '$lib/features/editor/code-store';
-	import { readFile } from '$lib/ipc/files';
+	import { readFile, writeFile } from '$lib/ipc/files';
 	import { isMarkdownFile } from '$lib/utils/file-routing';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
 	import type { EditorState, SettingsState, UiState } from '$lib/types/store';
@@ -122,15 +122,22 @@
 	}
 
 	/** Save the active file via IPC (notes use write_file; code is placeholder). */
-	function saveCurrentFile() {
+	async function saveCurrentFile() {
 		if (noteStore.isDirty) {
-			void noteStore.save();
+			const success = await noteStore.save();
+			if (!success) {
+				console.error('[shortcut] note save failed:', noteStore.lastError);
+			}
 			return;
 		}
-		if (codeStore.isDirty) {
-			// Code editor save will be wired in a future task (Monaco integration).
-			console.log('[shortcut] save code:', codeStore.filePath);
-			codeStore.markClean();
+		if (codeStore.isDirty && codeStore.filePath) {
+			try {
+				await writeFile(codeStore.filePath, codeStore.content);
+				codeStore.markClean();
+			} catch (err: unknown) {
+				const message = err instanceof Error ? err.message : String(err);
+				console.error('[shortcut] code save failed:', message);
+			}
 			return;
 		}
 	}
@@ -181,6 +188,14 @@
 		// Wire file-watcher events from Rust backend to UI stores
 		initFileWatcher().catch((err) => {
 			console.error('[vigil] failed to initialize file watcher listeners:', err);
+		});
+
+		// Attempt to open a workspace on startup.
+		// In production, the path comes from CLI args, recent workspaces, or a dialog.
+		// The app gracefully shows an empty explorer if no workspace is opened.
+		openAndLoadWorkspace('.').catch((err) => {
+			// Expected to fail in dev/browser mode; workspace will be opened via user action
+			console.debug('[vigil] initial workspace open skipped or failed:', err);
 		});
 	});
 

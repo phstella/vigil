@@ -1,12 +1,15 @@
 /**
  * Explorer UI state store.
  *
- * Provides mock file-tree data and local UI state (selection, expansion)
- * for the explorer panel. This will be replaced by real backend data
- * once IPC is wired up.
+ * Provides IPC-backed file-tree data and local UI state (selection, expansion)
+ * for the explorer panel. Tree data is loaded lazily per directory via `listDir`.
+ * File content is loaded via `readFile` when a file is selected.
+ *
+ * All paths stored and emitted are workspace-relative, per the IPC contract.
  */
 
 import type { DirEntry } from '$lib/types/store';
+import { listDir, readFile } from '$lib/ipc/files';
 import { editorStore } from '$lib/stores/editor';
 import { isMarkdownFile } from '$lib/utils/file-routing';
 import { detectLanguage } from '$lib/features/editor/code-store';
@@ -15,6 +18,8 @@ import { uiStore } from '$lib/stores/ui';
 /** A tree node extends DirEntry with optional children for recursive rendering. */
 export interface TreeNode extends DirEntry {
 	children?: TreeNode[];
+	/** Whether this directory's children have been loaded from the backend. */
+	childrenLoaded?: boolean;
 }
 
 export interface CollectionSummary {
@@ -25,64 +30,8 @@ export interface CollectionSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Mock data -- realistic workspace tree
+// Helpers
 // ---------------------------------------------------------------------------
-
-function file(
-	name: string,
-	path: string,
-	ext: string | null = null,
-	size: number = 1024
-): TreeNode {
-	return {
-		name,
-		path,
-		kind: 'file',
-		ext,
-		size_bytes: size,
-		modified_at_ms: Date.now(),
-		is_hidden: false
-	};
-}
-
-function dir(name: string, path: string, children: TreeNode[] = []): TreeNode {
-	return {
-		name,
-		path,
-		kind: 'dir',
-		ext: null,
-		size_bytes: null,
-		modified_at_ms: Date.now(),
-		is_hidden: false,
-		children
-	};
-}
-
-const MOCK_TREE: TreeNode[] = [
-	dir('notes', '/workspace/notes', [
-		dir('daily', '/workspace/notes/daily', [
-			file('2026-03-11.md', '/workspace/notes/daily/2026-03-11.md', 'md', 2048),
-			file('2026-03-10.md', '/workspace/notes/daily/2026-03-10.md', 'md', 1536),
-			file('2026-03-09.md', '/workspace/notes/daily/2026-03-09.md', 'md', 980)
-		]),
-		dir('projects', '/workspace/notes/projects', [
-			file('vigil-roadmap.md', '/workspace/notes/projects/vigil-roadmap.md', 'md', 4096),
-			file('design-system.md', '/workspace/notes/projects/design-system.md', 'md', 3200)
-		]),
-		file('index.md', '/workspace/notes/index.md', 'md', 512),
-		file('quick-capture.md', '/workspace/notes/quick-capture.md', 'md', 256)
-	]),
-	dir('scripts', '/workspace/scripts', [
-		file('build.ts', '/workspace/scripts/build.ts', 'ts', 1200),
-		file('deploy.sh', '/workspace/scripts/deploy.sh', 'sh', 800)
-	]),
-	dir('templates', '/workspace/templates', [
-		file('note-template.md', '/workspace/templates/note-template.md', 'md', 340),
-		file('meeting-template.md', '/workspace/templates/meeting-template.md', 'md', 520)
-	]),
-	file('README.md', '/workspace/README.md', 'md', 2400),
-	file('.vigilrc', '/workspace/.vigilrc', null, 128)
-];
 
 function summarizeNode(node: TreeNode): { filesCount: number; notesCount: number } {
 	if (node.kind === 'file') {
@@ -103,6 +52,73 @@ function summarizeNode(node: TreeNode): { filesCount: number; notesCount: number
 	return { filesCount, notesCount };
 }
 
+/** Convert a DirEntry from listDir into a TreeNode. */
+function entryToTreeNode(entry: DirEntry): TreeNode {
+	return {
+		...entry,
+		children: entry.kind === 'dir' ? [] : undefined,
+		childrenLoaded: false
+	};
+}
+
+/**
+ * Deep-clone a tree, replacing children of a target directory with new entries.
+ * Returns a new array (immutable update).
+ */
+function updateTreeChildren(
+	tree: TreeNode[],
+	dirPath: string,
+	newChildren: TreeNode[]
+): TreeNode[] {
+	return tree.map((node) => {
+		if (node.path === dirPath && node.kind === 'dir') {
+			return { ...node, children: newChildren, childrenLoaded: true };
+		}
+		if (node.kind === 'dir' && node.children && node.children.length > 0) {
+			const updatedChildren = updateTreeChildren(node.children, dirPath, newChildren);
+			if (updatedChildren !== node.children) {
+				return { ...node, children: updatedChildren };
+			}
+		}
+		return node;
+	});
+}
+
+/**
+ * Mark a directory as needing refresh by clearing its childrenLoaded flag.
+ */
+function markDirNeedsRefresh(tree: TreeNode[], dirPath: string): TreeNode[] {
+	return tree.map((node) => {
+		if (node.path === dirPath && node.kind === 'dir') {
+			return { ...node, childrenLoaded: false };
+		}
+		if (node.kind === 'dir' && node.children && node.children.length > 0) {
+			const updatedChildren = markDirNeedsRefresh(node.children, dirPath);
+			if (updatedChildren !== node.children) {
+				return { ...node, children: updatedChildren };
+			}
+		}
+		return node;
+	});
+}
+
+/**
+ * Remove a specific path from the tree (for deletions).
+ */
+function removeFromTree(tree: TreeNode[], targetPath: string): TreeNode[] {
+	return tree
+		.filter((node) => node.path !== targetPath)
+		.map((node) => {
+			if (node.kind === 'dir' && node.children) {
+				const filtered = removeFromTree(node.children, targetPath);
+				if (filtered !== node.children) {
+					return { ...node, children: filtered };
+				}
+			}
+			return node;
+		});
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -114,31 +130,47 @@ export interface ExplorerState {
 	workspaceName: string;
 	/** Total markdown note count for the workspace. */
 	notesCount: number;
+	/** Total file count for the workspace. */
+	filesCount: number;
 	/** Top-level collection summaries for explorer header display. */
 	collections: CollectionSummary[];
 	/** Set of expanded directory paths. */
 	expandedDirs: Set<string>;
 	/** Currently selected file path, or null. */
 	selectedFile: string | null;
+	/** Whether the workspace is currently being loaded. */
+	loading: boolean;
+	/** Error message if workspace loading failed. */
+	error: string | null;
 }
 
 function createExplorerStore() {
-	const tree: TreeNode[] = MOCK_TREE;
-	const workspaceName: string = 'My Workspace';
-	const notesCount = tree.reduce((sum, node) => sum + summarizeNode(node).notesCount, 0);
-	const collections: CollectionSummary[] = tree
-		.filter((node): node is TreeNode & { kind: 'dir' } => node.kind === 'dir')
-		.map((node) => {
-			const summary = summarizeNode(node);
-			return {
-				name: node.name,
-				path: node.path,
-				filesCount: summary.filesCount,
-				notesCount: summary.notesCount
-			};
-		});
+	let tree = $state<TreeNode[]>([]);
+	let workspaceName = $state<string>('');
+	let notesCount = $state<number>(0);
+	let filesCount = $state<number>(0);
 	let expandedDirs = $state<Set<string>>(new Set<string>());
 	let selectedFile = $state<string | null>(null);
+	let loading = $state<boolean>(false);
+	let error = $state<string | null>(null);
+
+	const collections = $derived.by(() => {
+		return tree
+			.filter((node): node is TreeNode & { kind: 'dir' } => node.kind === 'dir')
+			.map((node) => {
+				const summary = summarizeNode(node);
+				return {
+					name: node.name,
+					path: node.path,
+					filesCount: summary.filesCount,
+					notesCount: summary.notesCount
+				};
+			});
+	});
+
+	const derivedNotesCount = $derived.by(() => {
+		return tree.reduce((sum, node) => sum + summarizeNode(node).notesCount, 0);
+	});
 
 	return {
 		get tree() {
@@ -148,7 +180,10 @@ function createExplorerStore() {
 			return workspaceName;
 		},
 		get notesCount() {
-			return notesCount;
+			return notesCount || derivedNotesCount;
+		},
+		get filesCount() {
+			return filesCount;
 		},
 		get collections() {
 			return collections;
@@ -159,41 +194,159 @@ function createExplorerStore() {
 		get selectedFile() {
 			return selectedFile;
 		},
+		get loading() {
+			return loading;
+		},
+		get error() {
+			return error;
+		},
 
-		/** Toggle a directory's expanded/collapsed state. */
-		toggleExpand(path: string) {
+		/**
+		 * Initialize the explorer with workspace root data.
+		 * Called after openWorkspace succeeds.
+		 */
+		async loadWorkspaceRoot(name: string, rootNotesCount: number, rootFilesCount: number) {
+			loading = true;
+			error = null;
+			workspaceName = name;
+			notesCount = rootNotesCount;
+			filesCount = rootFilesCount;
+
+			try {
+				const response = await listDir('');
+				tree = response.entries.map(entryToTreeNode);
+				loading = false;
+			} catch (err: unknown) {
+				const msg = err && typeof err === 'object' && 'message' in err
+					? (err as { message: string }).message
+					: 'Failed to load workspace root';
+				error = msg;
+				loading = false;
+				console.error('[explorer] failed to load workspace root:', err);
+			}
+		},
+
+		/**
+		 * Toggle a directory's expanded/collapsed state.
+		 * When expanding, lazily loads children via listDir if not yet loaded.
+		 */
+		async toggleExpand(path: string) {
 			const next = new Set(expandedDirs);
 			if (next.has(path)) {
 				next.delete(path);
-			} else {
-				next.add(path);
+				expandedDirs = next;
+				return;
 			}
+
+			// Expanding: check if children need loading
+			next.add(path);
 			expandedDirs = next;
+
+			// Find the node to check if children are loaded
+			const node = findNode(tree, path);
+			if (node && node.kind === 'dir' && !node.childrenLoaded) {
+				try {
+					const response = await listDir(path);
+					const children = response.entries.map(entryToTreeNode);
+					tree = updateTreeChildren(tree, path, children);
+				} catch (err) {
+					console.error('[explorer] failed to load directory:', path, err);
+				}
+			}
 		},
 
-		/** Select a file by path and open it in the appropriate editor pane. */
-		selectFile(path: string) {
+		/** Select a file by path and open it in the appropriate editor pane via IPC readFile. */
+		async selectFile(path: string) {
 			selectedFile = path;
 
-			// Route to the correct editor pane.
-			// Content is a placeholder until real IPC is wired (task 3.5+).
-			const language = detectLanguage(path);
-			const mockContent = isMarkdownFile(path)
-				? `# ${path.split('/').pop()?.replace(/\.md$/, '') ?? 'Untitled'}\n\nStart writing...`
-				: `// ${path.split('/').pop() ?? 'file'}\n`;
-			editorStore.openFile(path, mockContent, language);
+			try {
+				const response = await readFile(path);
+				const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
+				editorStore.openFile(path, response.content, language);
 
-			// Show the right panel when opening a code file
-			if (!isMarkdownFile(path)) {
-				uiStore.openRightPanel();
+				// Show the right panel when opening a code file
+				if (!isMarkdownFile(path)) {
+					uiStore.openRightPanel();
+				}
+			} catch (err) {
+				console.error('[explorer] failed to read file:', path, err);
+				// Still open the file with empty content so the tab exists
+				const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
+				editorStore.openFile(path, '', language);
 			}
 		},
 
 		/** Check if a directory is expanded. */
 		isExpanded(path: string): boolean {
 			return expandedDirs.has(path);
+		},
+
+		/**
+		 * Handle a file-watcher index-updated event.
+		 * Refreshes affected parent directories so watcher changes flow to the visible tree.
+		 */
+		async handleIndexChange(changePath: string, changeType: 'created' | 'changed' | 'deleted') {
+			const parentDir = changePath.includes('/')
+				? changePath.substring(0, changePath.lastIndexOf('/'))
+				: '';
+
+			if (changeType === 'deleted') {
+				tree = removeFromTree(tree, changePath);
+			}
+
+			// Mark parent as needing refresh and re-fetch if expanded
+			tree = markDirNeedsRefresh(tree, parentDir);
+
+			if (expandedDirs.has(parentDir) || parentDir === '') {
+				try {
+					const response = await listDir(parentDir);
+					const children = response.entries.map(entryToTreeNode);
+					if (parentDir === '') {
+						tree = children;
+					} else {
+						tree = updateTreeChildren(tree, parentDir, children);
+					}
+				} catch (err) {
+					console.error('[explorer] failed to refresh directory:', parentDir, err);
+				}
+			}
+		},
+
+		/**
+		 * Handle a file rename: update the tree entry path.
+		 */
+		handleRename(oldPath: string, newPath: string) {
+			// Remove old, refresh parent dirs of both old and new
+			void this.handleIndexChange(oldPath, 'deleted');
+			void this.handleIndexChange(newPath, 'created');
+		},
+
+		/**
+		 * Reset the explorer to empty state (e.g. when switching workspaces).
+		 */
+		reset() {
+			tree = [];
+			workspaceName = '';
+			notesCount = 0;
+			filesCount = 0;
+			expandedDirs = new Set<string>();
+			selectedFile = null;
+			loading = false;
+			error = null;
 		}
 	};
+}
+
+/** Find a node in the tree by path. */
+function findNode(nodes: TreeNode[], path: string): TreeNode | undefined {
+	for (const node of nodes) {
+		if (node.path === path) return node;
+		if (node.kind === 'dir' && node.children) {
+			const found = findNode(node.children, path);
+			if (found) return found;
+		}
+	}
+	return undefined;
 }
 
 export const explorerStore = createExplorerStore();
@@ -215,72 +368,18 @@ export interface SearchResult {
 }
 
 /**
- * Mock search results -- realistic content matches across workspace files.
- * Will be replaced by real backend search_content results once IPC is wired.
+ * Search store -- currently a placeholder that will be wired to
+ * backend search_content IPC once available (Epic 4).
+ * Returns empty results until then.
  */
-const MOCK_SEARCH_RESULTS: SearchResult[] = [
-	{
-		filePath: '/workspace/notes/projects/vigil-roadmap.md',
-		fileName: 'vigil-roadmap.md',
-		lineNumber: 12,
-		lineContent: 'Implement the search panel with debounced input and result highlighting.'
-	},
-	{
-		filePath: '/workspace/notes/projects/design-system.md',
-		fileName: 'design-system.md',
-		lineNumber: 34,
-		lineContent: 'The search component uses a monospace font for snippet display.'
-	},
-	{
-		filePath: '/workspace/notes/daily/2026-03-11.md',
-		fileName: '2026-03-11.md',
-		lineNumber: 5,
-		lineContent: 'Worked on search functionality and sidebar integration today.'
-	},
-	{
-		filePath: '/workspace/notes/index.md',
-		fileName: 'index.md',
-		lineNumber: 8,
-		lineContent: 'Use the search panel to find notes across the workspace quickly.'
-	},
-	{
-		filePath: '/workspace/scripts/build.ts',
-		fileName: 'build.ts',
-		lineNumber: 22,
-		lineContent: 'const searchPaths = glob.sync("**/*.md", { cwd: root });'
-	},
-	{
-		filePath: '/workspace/README.md',
-		fileName: 'README.md',
-		lineNumber: 15,
-		lineContent: 'Full-text search is available via the sidebar search panel or Ctrl+Shift+F.'
-	},
-	{
-		filePath: '/workspace/notes/quick-capture.md',
-		fileName: 'quick-capture.md',
-		lineNumber: 3,
-		lineContent: 'Quick search: remember to review the roadmap before standup.'
-	},
-	{
-		filePath: '/workspace/templates/note-template.md',
-		fileName: 'note-template.md',
-		lineNumber: 1,
-		lineContent: '# {{title}} -- searchable note template'
-	}
-];
-
 function createSearchStore() {
 	let query = $state('');
 
-	const results = $derived.by(() => {
+	const results = $derived.by((): SearchResult[] => {
+		// Search will be backed by IPC search_content in Epic 4.
+		// For now, return empty results (no mock data).
 		if (query.length === 0) return [];
-		const lower = query.toLowerCase();
-		return MOCK_SEARCH_RESULTS.filter(
-			(r) =>
-				r.lineContent.toLowerCase().includes(lower) ||
-				r.fileName.toLowerCase().includes(lower) ||
-				r.filePath.toLowerCase().includes(lower)
-		);
+		return [];
 	});
 
 	return {

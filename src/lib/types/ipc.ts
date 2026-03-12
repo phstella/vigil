@@ -195,6 +195,31 @@ export interface BacklinksResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Graph
+// ---------------------------------------------------------------------------
+
+/** A node in the note link graph. */
+export interface NoteNode {
+	id: string;
+	path: string;
+	title: string;
+	tags: string[];
+}
+
+/** A directed edge in the note link graph. */
+export interface LinkEdge {
+	from_node_id: string;
+	to_node_id: string;
+	kind: 'wikilink' | 'markdown';
+}
+
+/** Response from get_note_graph. */
+export interface NoteGraphResponse {
+	nodes: NoteNode[];
+	edges: LinkEdge[];
+}
+
+// ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
 

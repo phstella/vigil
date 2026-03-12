@@ -32,11 +32,12 @@
 		codeLanguage: 'plaintext'
 	});
 
-	// Subscribe to the UI store to track omnibar visibility.
+	// Subscribe to the UI store to track omnibar visibility and mode.
 	let uiState: UiState = $state({
 		sidebarOpen: true,
 		sidebarSection: 'explorer',
 		omnibarOpen: false,
+		omnibarMode: 'file',
 		rightPanelOpen: false
 	});
 
@@ -99,16 +100,19 @@
 	}
 
 	function handleOmnibarClose() {
-		if (uiState.omnibarOpen) {
-			uiStore.toggleOmnibar();
-		}
+		uiStore.closeOmnibar();
 	}
 
-	async function handleOmnibarSelect(path: string) {
+	async function handleOmnibarSelect(path: string, lineNumber?: number) {
 		try {
 			const response = await readFile(path);
 			const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
 			editorStore.openFileRouted(path, response.content, language);
+			if (lineNumber !== undefined) {
+				// Line number is available for content search results.
+				// Editors will use this to jump to the matching line once go-to-line is wired.
+				console.debug('[omnibar] open at line:', lineNumber);
+			}
 		} catch (err) {
 			console.error('[omnibar] failed to open file:', path, err);
 		}
@@ -155,6 +159,7 @@
 		});
 
 		shortcutRegistry.register('ctrl+p', () => uiStore.toggleOmnibar(), { global: true });
+		shortcutRegistry.register('ctrl+shift+f', () => uiStore.openOmnibar('content'), { global: true });
 		shortcutRegistry.register('ctrl+s', saveCurrentFile, { global: true });
 		shortcutRegistry.register('ctrl+b', () => uiStore.toggleSidebar(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
@@ -168,6 +173,7 @@
 
 	onDestroy(() => {
 		shortcutRegistry.unregister('ctrl+p');
+		shortcutRegistry.unregister('ctrl+shift+f');
 		shortcutRegistry.unregister('ctrl+s');
 		shortcutRegistry.unregister('ctrl+b');
 		shortcutRegistry.unregister('ctrl+n');
@@ -244,5 +250,5 @@
 
 <!-- Omnibar overlay, rendered outside the AppShell so it floats above everything -->
 {#if uiState.omnibarOpen}
-	<Omnibar onclose={handleOmnibarClose} onselect={handleOmnibarSelect} />
+	<Omnibar onclose={handleOmnibarClose} onselect={handleOmnibarSelect} initialMode={uiState.omnibarMode} />
 {/if}

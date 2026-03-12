@@ -1,10 +1,16 @@
 /**
- * Note editor UI state store.
+ * Note editor UI state store with IPC-backed open/save/autosave lifecycle.
  *
- * Provides local state for the NoteEditor skeleton component.
- * Tracks the active markdown file path, content buffer, and dirty state.
- * Will be extended with Tiptap integration in a future epic.
+ * Tracks the active markdown file path, content buffer, dirty state, etag
+ * for optimistic concurrency, and an autosave timer that debounces writes
+ * after the user stops typing.
  */
+
+import { readFile, writeFile } from '$lib/ipc/files';
+import { isVigilError } from '$lib/ipc/tauri';
+
+/** Autosave debounce delay in milliseconds. */
+const AUTOSAVE_DELAY_MS = 2000;
 
 export interface NoteEditorState {
 	/** Workspace-relative path of the active note, or null. */
@@ -13,12 +19,69 @@ export interface NoteEditorState {
 	content: string;
 	/** Whether the note has unsaved modifications. */
 	isDirty: boolean;
+	/** Whether a save operation is currently in progress. */
+	isSaving: boolean;
+	/** Last error message from a save attempt, or null. */
+	lastError: string | null;
 }
 
 function createNoteStore() {
 	let filePath = $state<string | null>(null);
 	let content = $state('');
 	let isDirty = $state(false);
+	let isSaving = $state(false);
+	let lastError = $state<string | null>(null);
+
+	/** Content hash (etag) from the last read or successful write. */
+	let etag: string | null = null;
+
+	/** Handle for the autosave debounce timer. */
+	let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Clear any pending autosave timer. */
+	function clearAutosave() {
+		if (autosaveTimer !== null) {
+			clearTimeout(autosaveTimer);
+			autosaveTimer = null;
+		}
+	}
+
+	/** Schedule an autosave after the debounce delay. */
+	function scheduleAutosave() {
+		clearAutosave();
+		autosaveTimer = setTimeout(() => {
+			autosaveTimer = null;
+			// Only autosave if dirty and not already saving.
+			if (isDirty && !isSaving && filePath) {
+				void performSave();
+			}
+		}, AUTOSAVE_DELAY_MS);
+	}
+
+	/** Internal save implementation that writes to the backend. */
+	async function performSave(): Promise<boolean> {
+		if (!filePath || !isDirty) return true;
+		if (isSaving) return false;
+
+		isSaving = true;
+		lastError = null;
+
+		try {
+			const response = await writeFile(filePath, content, etag);
+			etag = response.etag;
+			isDirty = false;
+			isSaving = false;
+			return true;
+		} catch (err: unknown) {
+			isSaving = false;
+			if (isVigilError(err)) {
+				lastError = `Save failed: ${err.message} (${err.code})`;
+			} else {
+				lastError = 'Save failed: unknown error';
+			}
+			return false;
+		}
+	}
 
 	return {
 		get filePath() {
@@ -30,30 +93,93 @@ function createNoteStore() {
 		get isDirty() {
 			return isDirty;
 		},
-
-		/** Load a markdown file into the note editor. */
-		load(path: string, text: string) {
-			filePath = path;
-			content = text;
-			isDirty = false;
+		get isSaving() {
+			return isSaving;
+		},
+		get lastError() {
+			return lastError;
 		},
 
-		/** Update the content buffer and mark as dirty. */
+		/**
+		 * Open a markdown file by reading it from the backend.
+		 * Replaces the current buffer entirely.
+		 */
+		async open(path: string): Promise<boolean> {
+			// If switching files while dirty, attempt to save the current one first.
+			if (filePath && isDirty && filePath !== path) {
+				clearAutosave();
+				await performSave();
+			}
+
+			clearAutosave();
+			lastError = null;
+
+			try {
+				const response = await readFile(path);
+				filePath = path;
+				content = response.content;
+				etag = response.etag;
+				isDirty = false;
+				isSaving = false;
+				return true;
+			} catch (err: unknown) {
+				if (isVigilError(err)) {
+					lastError = `Open failed: ${err.message} (${err.code})`;
+				} else {
+					lastError = 'Open failed: unknown error';
+				}
+				return false;
+			}
+		},
+
+		/**
+		 * Load content directly (for when content is already available,
+		 * e.g., from the editor store or initial props).
+		 */
+		load(path: string, text: string, fileEtag?: string) {
+			clearAutosave();
+			filePath = path;
+			content = text;
+			etag = fileEtag ?? null;
+			isDirty = false;
+			isSaving = false;
+			lastError = null;
+		},
+
+		/** Update the content buffer, mark dirty, and schedule autosave. */
 		updateContent(text: string) {
 			content = text;
 			isDirty = true;
+			lastError = null;
+			scheduleAutosave();
 		},
 
-		/** Clear dirty state (e.g. after save). */
+		/** Explicitly save the current buffer to disk via IPC. */
+		async save(): Promise<boolean> {
+			clearAutosave();
+			return performSave();
+		},
+
+		/** Clear dirty state without writing (use with caution). */
 		markClean() {
 			isDirty = false;
+			clearAutosave();
 		},
 
 		/** Reset the store to its initial empty state. */
 		reset() {
+			clearAutosave();
 			filePath = null;
 			content = '';
+			etag = null;
 			isDirty = false;
+			isSaving = false;
+			lastError = null;
+		},
+
+		/** Cancel any pending autosave (e.g., on component teardown). */
+		cancelAutosave() {
+			clearAutosave();
 		}
 	};
 }

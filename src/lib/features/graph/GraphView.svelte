@@ -34,7 +34,8 @@
 		transform: { offsetX: 0, offsetY: 0, scale: 1 },
 		isSimulating: false,
 		isLoading: false,
-		error: null
+		error: null,
+		usingMockData: false
 	});
 
 	let selEdges: Set<string> = $state(new Set());
@@ -288,8 +289,14 @@
 		>
 			&minus;
 		</button>
+		{#if graphData.usingMockData}
+			<span
+				class="ml-auto rounded bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
+				title="Backend graph command not available yet — showing demo data (Epic 4)"
+			>Demo data</span>
+		{/if}
 		{#if graphData.isSimulating}
-			<span class="ml-auto text-[9px] text-text-muted">simulating...</span>
+			<span class:ml-auto={!graphData.usingMockData} class="text-[9px] text-text-muted">simulating...</span>
 		{/if}
 	</div>
 

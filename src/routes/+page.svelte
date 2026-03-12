@@ -5,6 +5,7 @@
 	import { EditorRouter } from '$lib/features/editor';
 	import { Omnibar } from '$lib/features/omnibar';
 	import { StatusBar } from '$lib/features/status';
+	import { statusStore } from '$lib/features/status/status-store';
 	import { initFileWatcher, teardownFileWatcher } from '$lib/features/workspace';
 	import { editorStore } from '$lib/stores/editor';
 	import { settingsStore } from '$lib/stores/settings';
@@ -171,6 +172,11 @@
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
 		window.addEventListener('keydown', handleActivity, { capture: true });
 		scheduleSidebarAutoHide();
+
+		// Fetch initial workspace status from backend (falls back to mock data)
+		statusStore.initialize().catch((err) => {
+			console.error('[vigil] failed to initialize status store:', err);
+		});
 
 		// Wire file-watcher events from Rust backend to UI stores
 		initFileWatcher().catch((err) => {

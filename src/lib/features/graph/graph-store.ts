@@ -48,6 +48,8 @@ export interface GraphState {
 	isSimulating: boolean;
 	isLoading: boolean;
 	error: string | null;
+	/** True when graph is displaying mock data because the backend is not yet available. */
+	usingMockData: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +236,8 @@ function createGraphStore() {
 		transform: { offsetX: 0, offsetY: 0, scale: 1 },
 		isSimulating: false,
 		isLoading: false,
-		error: null
+		error: null,
+		usingMockData: false
 	});
 
 	let animFrameId: number | null = null;
@@ -276,21 +279,29 @@ function createGraphStore() {
 
 		/** Load graph data from backend or fallback to mock. */
 		async loadGraph(width: number = 400, height: number = 400) {
-			store.update((s) => ({ ...s, isLoading: true, error: null }));
+			store.update((s) => ({ ...s, isLoading: true, error: null, usingMockData: false }));
 			stopSimulation();
 
 			let noteNodes: NoteNode[];
 			let linkEdges: LinkEdge[];
+			let isMock = false;
 
 			try {
 				const { getNoteGraph } = await import('$lib/ipc/links');
 				const response = await getNoteGraph();
 				noteNodes = response.nodes;
 				linkEdges = response.edges;
-			} catch {
-				// Backend not available -- use mock data
+			} catch (err) {
+				// Backend command `get_note_graph` is not registered yet (deferred to Epic 4).
+				// Fall back to mock data so the UI remains functional.
+				console.warn(
+					'[graph-store] get_note_graph IPC failed — backend command not available. ' +
+					'Using demo data. This will be resolved in Epic 4.',
+					err
+				);
 				noteNodes = MOCK_NODES;
 				linkEdges = MOCK_EDGES;
+				isMock = true;
 			}
 
 			const nodes = createLayoutNodes(noteNodes, width, height);
@@ -303,7 +314,8 @@ function createGraphStore() {
 				selectedNodeId: null,
 				hoveredNodeId: null,
 				transform: { offsetX: 0, offsetY: 0, scale: 1 },
-				isLoading: false
+				isLoading: false,
+				usingMockData: isMock
 			}));
 
 			runSimulation();

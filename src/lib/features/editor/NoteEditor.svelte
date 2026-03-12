@@ -20,6 +20,10 @@
 	import WikilinkAutocomplete from '$lib/features/links/WikilinkAutocomplete.svelte';
 	import { linksStore } from '$lib/features/links/links-store';
 	import { detectWikilinkTrigger, insertWikilink } from '$lib/utils/markdown';
+	import { editorStore } from '$lib/stores/editor';
+	import { readFile } from '$lib/ipc/files';
+	import { isMarkdownFile } from '$lib/utils/file-routing';
+	import { detectLanguage } from './code-store';
 
 	let {
 		filePath,
@@ -142,9 +146,14 @@
 		noteStore.toggleViewMode();
 	}
 
-	function handleBacklinkNavigate(path: string) {
-		// TODO: Wire to editor open flow (navigate to the backlink source note).
-		console.log('[backlinks] navigate to:', path);
+	async function handleBacklinkNavigate(path: string) {
+		try {
+			const response = await readFile(path);
+			const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
+			editorStore.openFileRouted(path, response.content, language);
+		} catch (err) {
+			console.error('[backlinks] failed to open file:', path, err);
+		}
 	}
 
 	let isPreview = $derived(noteStore.viewMode === 'preview');

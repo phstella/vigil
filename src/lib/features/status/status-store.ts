@@ -25,6 +25,25 @@ function createStatusStore() {
 		/** Patch individual fields without replacing the entire status. */
 		patch(partial: Partial<WorkspaceStatus>) {
 			update((s) => ({ ...s, ...partial }));
+		},
+
+		/**
+		 * Fetch workspace status from the backend via IPC.
+		 * Should be called once on app mount. Falls back to mock data
+		 * if the backend is unavailable.
+		 */
+		async initialize() {
+			try {
+				const { workspaceStatus } = await import('$lib/ipc/status');
+				const status = await workspaceStatus();
+				set(status);
+			} catch (err) {
+				console.warn(
+					'[status-store] workspace_status IPC failed — using mock data as fallback.',
+					err
+				);
+				// Keep MOCK_STATUS (already set as initial value)
+			}
 		}
 	};
 }

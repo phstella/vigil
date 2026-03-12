@@ -1,12 +1,17 @@
 <script lang="ts">
 	/**
-	 * NoteEditor -- Skeleton markdown editing surface.
+	 * NoteEditor -- Markdown editing surface with IPC-backed open/save/autosave.
 	 *
-	 * Displays a file path header/tab area and a monospace textarea for
-	 * markdown content. This is a placeholder for future Tiptap WYSIWYG
-	 * integration. Tracks dirty state via the note store.
+	 * Displays a file path header/tab area with dirty indicator and a monospace
+	 * textarea for markdown content. Loads file content via read_file IPC on
+	 * open, saves via write_file IPC, and autosaves after a 2-second debounce.
+	 * Tracks dirty state and etag for optimistic concurrency.
+	 *
+	 * This is a placeholder textarea surface; Tiptap WYSIWYG integration is
+	 * deferred to task 3.3.
 	 */
 
+	import { onDestroy } from 'svelte';
 	import { noteStore } from './note-store';
 
 	let {
@@ -17,15 +22,30 @@
 		content: string;
 	} = $props();
 
-	// Sync incoming props into the local note store on load.
+	// Track which file path we last loaded so we can detect prop changes.
+	let loadedPath: string | null = null;
+
+	// When filePath or content props change, load into the note store.
 	$effect(() => {
-		noteStore.load(filePath, content);
+		if (filePath && filePath !== loadedPath) {
+			loadedPath = filePath;
+			// Open via IPC to get etag for optimistic concurrency.
+			// Fall back to direct load if IPC is unavailable (dev/test).
+			noteStore.open(filePath).catch(() => {
+				noteStore.load(filePath, content);
+			});
+		}
 	});
 
 	function handleInput(e: Event) {
 		const target = e.target as HTMLTextAreaElement;
 		noteStore.updateContent(target.value);
 	}
+
+	// Clean up autosave timer on destroy.
+	onDestroy(() => {
+		noteStore.cancelAutosave();
+	});
 </script>
 
 <div class="flex h-full flex-col bg-surface-base">
@@ -45,11 +65,22 @@
 		<span class="truncate text-xs font-medium text-text-secondary" title={filePath}>
 			{filePath}
 		</span>
-		{#if noteStore.isDirty}
+		{#if noteStore.isSaving}
+			<span
+				class="ml-auto text-[10px] font-medium text-text-muted"
+				title="Saving..."
+			>saving</span>
+		{:else if noteStore.isDirty}
 			<span
 				class="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent"
 				title="Unsaved changes"
 			></span>
+		{/if}
+		{#if noteStore.lastError}
+			<span
+				class="ml-1 truncate text-[10px] text-red-400"
+				title={noteStore.lastError}
+			>{noteStore.lastError}</span>
 		{/if}
 	</header>
 

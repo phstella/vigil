@@ -102,19 +102,18 @@
 		console.log('[omnibar] selected:', path);
 	}
 
-	/** Placeholder save action -- logs and clears dirty state. */
+	/** Save the active file via IPC (notes use write_file; code is placeholder). */
 	function saveCurrentFile() {
 		if (noteStore.isDirty) {
-			console.log('[shortcut] save note:', noteStore.filePath);
-			noteStore.markClean();
+			void noteStore.save();
 			return;
 		}
 		if (codeStore.isDirty) {
+			// Code editor save will be wired in a future task (Monaco integration).
 			console.log('[shortcut] save code:', codeStore.filePath);
 			codeStore.markClean();
 			return;
 		}
-		console.log('[shortcut] save: nothing to save');
 	}
 
 	/** Placeholder new note action. */

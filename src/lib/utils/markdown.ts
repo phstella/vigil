@@ -67,6 +67,104 @@ function renderInline(text: string): string {
 /**
  * Convert a full markdown string to HTML.
  */
+/**
+ * Represents a parsed wikilink extracted from markdown content.
+ */
+export interface WikilinkMatch {
+	/** Raw target text inside the brackets (e.g., "other-note" from [[other-note]]). */
+	target: string;
+	/** Display text if provided via pipe syntax, otherwise same as target. */
+	display: string;
+	/** Start index of the full `[[...]]` match in the source string. */
+	start: number;
+	/** End index (exclusive) of the full `[[...]]` match in the source string. */
+	end: number;
+}
+
+/**
+ * Extract all `[[wikilink]]` references from markdown content.
+ *
+ * Handles `[[target]]` and `[[target|display text]]` syntax.
+ * Does not skip code blocks -- caller should handle that if needed.
+ */
+export function extractWikilinks(content: string): WikilinkMatch[] {
+	const matches: WikilinkMatch[] = [];
+	const re = /\[\[([^\]\n]+?)\]\]/g;
+	let m: RegExpExecArray | null;
+
+	while ((m = re.exec(content)) !== null) {
+		const inner = m[1];
+		const pipeIdx = inner.indexOf('|');
+		const target = pipeIdx >= 0 ? inner.slice(0, pipeIdx).trim() : inner.trim();
+		const display = pipeIdx >= 0 ? inner.slice(pipeIdx + 1).trim() : inner.trim();
+
+		if (target) {
+			matches.push({
+				target,
+				display,
+				start: m.index,
+				end: m.index + m[0].length
+			});
+		}
+	}
+
+	return matches;
+}
+
+/**
+ * Detect if the cursor is currently inside a `[[` trigger sequence.
+ *
+ * Returns the partial query text after `[[` if triggered, or null if not.
+ * For example, if text is "See [[oth" and cursor is at end, returns "oth".
+ */
+export function detectWikilinkTrigger(text: string, cursorPos: number): string | null {
+	// Look backwards from cursor for `[[` without a closing `]]`
+	const before = text.slice(0, cursorPos);
+	const lastOpen = before.lastIndexOf('[[');
+	if (lastOpen < 0) return null;
+
+	// Check there's no closing ]] between the [[ and cursor
+	const afterOpen = before.slice(lastOpen + 2);
+	if (afterOpen.includes(']]')) return null;
+
+	// Check no newline between [[ and cursor
+	if (afterOpen.includes('\n')) return null;
+
+	return afterOpen;
+}
+
+/**
+ * Insert a wikilink into text at the cursor position, replacing any partial trigger.
+ *
+ * Returns the new text and the new cursor position after the inserted link.
+ */
+export function insertWikilink(
+	text: string,
+	cursorPos: number,
+	target: string
+): { text: string; cursor: number } {
+	const before = text.slice(0, cursorPos);
+	const lastOpen = before.lastIndexOf('[[');
+	if (lastOpen < 0) {
+		// Fallback: insert at cursor
+		const link = `[[${target}]]`;
+		return {
+			text: text.slice(0, cursorPos) + link + text.slice(cursorPos),
+			cursor: cursorPos + link.length
+		};
+	}
+
+	const link = `[[${target}]]`;
+	const after = text.slice(cursorPos);
+	return {
+		text: text.slice(0, lastOpen) + link + after,
+		cursor: lastOpen + link.length
+	};
+}
+
+/**
+ * Convert a full markdown string to HTML.
+ */
 export function markdownToHtml(markdown: string): string {
 	const lines = markdown.split('\n');
 	const outputBlocks: string[] = [];

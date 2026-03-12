@@ -1,18 +1,25 @@
 <script lang="ts">
 	/**
-	 * NoteEditor -- Markdown editing surface with IPC-backed open/save/autosave
-	 * and live preview toggle.
+	 * NoteEditor -- Markdown editing surface with IPC-backed open/save/autosave,
+	 * live preview toggle, `[[` wikilink autocomplete, and backlinks panel.
 	 *
 	 * Displays a file path header/tab area with dirty/saving indicators and a
 	 * view-mode toggle button. In 'edit' mode: shows a monospace textarea for
-	 * raw markdown editing. In 'preview' mode: shows rendered markdown via
-	 * InlinePreview. Raw text is always preserved as the source of truth.
-	 * Toggle via Ctrl+. or the header button.
+	 * raw markdown editing with `[[` autocomplete. In 'preview' mode: shows
+	 * rendered markdown via InlinePreview. Raw text is always preserved as the
+	 * source of truth. Toggle via Ctrl+. or the header button.
+	 *
+	 * The BacklinksPanel is displayed below the editor and updates when the
+	 * active file changes or content is saved.
 	 */
 
 	import { onDestroy } from 'svelte';
 	import { noteStore } from './note-store';
 	import InlinePreview from '$lib/features/preview/InlinePreview.svelte';
+	import BacklinksPanel from '$lib/features/links/BacklinksPanel.svelte';
+	import WikilinkAutocomplete from '$lib/features/links/WikilinkAutocomplete.svelte';
+	import { linksStore } from '$lib/features/links/links-store';
+	import { detectWikilinkTrigger, insertWikilink } from '$lib/utils/markdown';
 
 	let {
 		filePath,
@@ -25,6 +32,14 @@
 	// Track which file path we last loaded so we can detect prop changes.
 	let loadedPath: string | null = null;
 
+	// Wikilink autocomplete state
+	let autocompleteVisible = $state(false);
+	let autocompleteQuery = $state('');
+	let autocompleteX = $state(0);
+	let autocompleteY = $state(0);
+	let textareaRef: HTMLTextAreaElement | null = $state(null);
+	let autocompleteRef: WikilinkAutocomplete | null = $state(null);
+
 	// When filePath or content props change, load into the note store.
 	$effect(() => {
 		if (filePath && filePath !== loadedPath) {
@@ -34,23 +49,110 @@
 			noteStore.open(filePath).catch(() => {
 				noteStore.load(filePath, content);
 			});
+			// Update backlinks for the new file
+			void linksStore.setActivePath(filePath);
 		}
+	});
+
+	// When the note saves successfully (dirty becomes false after being true),
+	// schedule a backlinks refresh since the saved content may contain new/removed links.
+	let wasDirty = false;
+	$effect(() => {
+		const dirty = noteStore.isDirty;
+		const saving = noteStore.isSaving;
+		if (wasDirty && !dirty && !saving) {
+			// Just finished saving - refresh backlinks
+			linksStore.scheduleRefresh();
+		}
+		wasDirty = dirty;
 	});
 
 	function handleInput(e: Event) {
 		const target = e.target as HTMLTextAreaElement;
 		noteStore.updateContent(target.value);
+		checkAutocomplete(target);
+	}
+
+	function checkAutocomplete(textarea: HTMLTextAreaElement) {
+		const cursorPos = textarea.selectionStart;
+		const trigger = detectWikilinkTrigger(textarea.value, cursorPos);
+
+		if (trigger !== null) {
+			autocompleteQuery = trigger;
+			autocompleteVisible = true;
+			// Position the dropdown near the cursor
+			updateAutocompletePosition(textarea, cursorPos);
+		} else {
+			autocompleteVisible = false;
+			autocompleteQuery = '';
+		}
+	}
+
+	function updateAutocompletePosition(textarea: HTMLTextAreaElement, cursorPos: number) {
+		// Approximate position based on character offset
+		// Use a mirror element technique for accurate positioning
+		const text = textarea.value.substring(0, cursorPos);
+		const lines = text.split('\n');
+		const lineNum = lines.length - 1;
+		const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 20;
+		const charWidth = 8; // approximate for monospace
+
+		// Get textarea's parent position for relative placement
+		const parentRect = textarea.parentElement?.getBoundingClientRect();
+		if (!parentRect) return;
+
+		const relX = (lines[lineNum]?.length ?? 0) * charWidth;
+		const relY = (lineNum + 1) * lineHeight;
+
+		// Clamp X to not overflow
+		autocompleteX = Math.min(relX, parentRect.width - 270);
+		autocompleteY = Math.min(relY + 4, parentRect.height - 200);
+	}
+
+	function handleAutocompleteSelect(noteName: string) {
+		if (!textareaRef) return;
+		const cursorPos = textareaRef.selectionStart;
+		const result = insertWikilink(textareaRef.value, cursorPos, noteName);
+		noteStore.updateContent(result.text);
+
+		// Update textarea and move cursor
+		textareaRef.value = result.text;
+		textareaRef.selectionStart = result.cursor;
+		textareaRef.selectionEnd = result.cursor;
+		textareaRef.focus();
+
+		autocompleteVisible = false;
+		autocompleteQuery = '';
+	}
+
+	function handleAutocompleteClose() {
+		autocompleteVisible = false;
+		autocompleteQuery = '';
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		// Let autocomplete handle keys first when visible
+		if (autocompleteVisible && autocompleteRef) {
+			const handled = autocompleteRef.handleKeydown(e);
+			if (handled) return;
+		}
 	}
 
 	function handleToggle() {
 		noteStore.toggleViewMode();
 	}
 
+	function handleBacklinkNavigate(path: string) {
+		// TODO: Wire to editor open flow (navigate to the backlink source note).
+		console.log('[backlinks] navigate to:', path);
+	}
+
 	let isPreview = $derived(noteStore.viewMode === 'preview');
 
-	// Clean up autosave timer on destroy.
+	// Clean up on destroy.
 	onDestroy(() => {
 		noteStore.cancelAutosave();
+		linksStore.cancelRefresh();
 	});
 </script>
 
@@ -123,15 +225,31 @@
 			<InlinePreview content={noteStore.content} />
 		</div>
 	{:else}
-		<div class="flex-1 overflow-auto p-4">
+		<div class="relative flex-1 overflow-auto p-4">
 			<textarea
+				bind:this={textareaRef}
 				class="h-full w-full resize-none border-none bg-transparent font-mono text-sm leading-relaxed text-text-primary outline-none placeholder:text-text-muted"
 				placeholder="Start writing..."
 				value={noteStore.content}
 				oninput={handleInput}
+				onkeydown={handleKeydown}
 				spellcheck="true"
 				aria-label="Markdown editor"
 			></textarea>
+
+			<!-- Wikilink autocomplete dropdown -->
+			<WikilinkAutocomplete
+				bind:this={autocompleteRef}
+				query={autocompleteQuery}
+				visible={autocompleteVisible}
+				anchorX={autocompleteX}
+				anchorY={autocompleteY}
+				onSelect={handleAutocompleteSelect}
+				onClose={handleAutocompleteClose}
+			/>
 		</div>
 	{/if}
+
+	<!-- Backlinks panel at the bottom of the editor -->
+	<BacklinksPanel onNavigate={handleBacklinkNavigate} />
 </div>

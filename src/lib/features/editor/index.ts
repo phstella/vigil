@@ -6,3 +6,10 @@ export { noteStore } from './note-store';
 export type { NoteEditorState } from './note-store';
 export { codeStore, detectLanguage } from './code-store';
 export type { CodeEditorState } from './code-store';
+export {
+	loadMonaco,
+	getDefaultEditorOptions,
+	detectMonacoLanguage,
+	VIGIL_THEME_NAME,
+	vigilDarkTheme
+} from './monaco-config';

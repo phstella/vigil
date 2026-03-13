@@ -42,9 +42,6 @@
         ],
         "section": "editors",
         "priority": "optional"
-      },
-      "appimage": {
-        "bundleMediaFramework": false
       }
     },
     "windows": {

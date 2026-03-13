@@ -35,7 +35,7 @@ Updated after recovery orchestration pass on 2026-03-12, with follow-up correcti
 | 3.9 | Interactive graph view | `src/lib/features/graph/GraphView.svelte`, `src/lib/features/graph/graph-store.ts`, `src-tauri/src/commands/links.rs` | **FIXED**: `get_note_graph` command added and registered in backend; frontend wired to real IPC; mock fallback retained for graceful degradation | PASS |
 | 3.10 | File-watcher events -> UI sync | `src/lib/features/workspace/file-watcher.ts`, `src/lib/features/explorer/explorer-store.ts` | Watcher bridge wired to explorer/editor/status stores | PASS |
 | 3.11 | Performance hardening vs budget gates | `src/lib/features/editor/CodeEditor.svelte`, `src/lib/features/explorer/FileTree.svelte`, `src/lib/utils/perf.ts` | Lazy Monaco, virtualized tree, perf instrumentation implemented; full budget matrix requires runtime profiling | PASS (deferred: runtime profiling) |
-| 3.12 | Linux/Windows artifacts + smoke matrix | `src-tauri/tauri.conf.json`, `src-tauri/tests/smoke_matrix.rs`, `.github/workflows/ci.yml` | CI `package` job configured for Linux/Windows on push/PR/manual; local `npx tauri build` produces `.deb`/`.rpm` but fails on AppImage (`linuxdeploy`) | PARTIAL |
+| 3.12 | Linux/Windows artifacts + smoke matrix | `src-tauri/tauri.conf.json`, `src-tauri/tauri.linux.conf.json`, `src-tauri/tests/smoke_matrix.rs`, `.github/workflows/ci.yml` | Linux packaging target is explicitly constrained to `.deb`/`.rpm` (AppImage deferred); local `npx tauri build` succeeds for Linux artifacts; CI package evidence for this scope still pending | PARTIAL |
 
 ## Validation Gates
 
@@ -75,8 +75,8 @@ Rust gate evidence:
 - Open high risks: **None** (status re-fetch fixed; graph backend command registered)
 - Open medium risks:
   - Runtime smoke testing not performed (requires Tauri runtime environment)
-  - Local packaging remains partial: AppImage bundling fails with `failed to run linuxdeploy` while `.deb`/`.rpm` succeed
-  - Packaging artifacts not yet verified by a successful CI `package` run tied to this recovery scope
+  - Packaging artifacts not yet verified by a successful CI `package` run tied to this recovery scope (Linux + Windows)
+  - AppImage is explicitly deferred from local Linux packaging target set
 - Deferred items (explicitly accepted at MVP level):
   - Workspace chooser UX — hardcoded `.` path is acceptable for MVP
   - Open-at-line jump from content search results
@@ -85,5 +85,5 @@ Rust gate evidence:
 ## Final Decision
 
 - Decision: `PARTIAL`
-- Rationale: Critical note-switch behavior is now corrected and frontend + Rust quality gates pass locally, but completion-standard release evidence is still incomplete. Runtime smoke checks are unchecked, and packaging evidence is partial due local AppImage failure plus pending CI package confirmation for this scope.
+- Rationale: Critical note-switch behavior is now corrected and frontend + Rust quality gates pass locally, but completion-standard release evidence is still incomplete. Runtime smoke checks are unchecked, and packaging evidence for both required platforms still needs CI confirmation for this scope.
 - Conditions: Attach green Rust + package CI evidence and complete required runtime smoke checks before claiming `PASS`.

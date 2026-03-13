@@ -45,8 +45,8 @@ Bring Epic 3 (Core MVP Integration) to implementation sufficiency while recordin
 ### 4. Medium: CI packaging jobs missing (3.12-fix) — PARTIAL
 
 - **Problem**: No `tauri build` jobs in CI for Linux/Windows artifacts.
-- **Fix**: Added `package` job with Linux/Windows matrix and artifact upload; trigger now supports push/PR/manual runs.
-- **Evidence**: YAML validated; local `npx tauri build` produces `.deb`/`.rpm` but AppImage still fails (`failed to run linuxdeploy`).
+- **Fix**: Added `package` job with Linux/Windows matrix and artifact upload; trigger now supports push/PR/manual runs. Added Linux-specific Tauri config to target `.deb`/`.rpm` and defer AppImage.
+- **Evidence**: YAML validated; local `npx tauri build` now succeeds for Linux `.deb`/`.rpm` artifacts.
 - **Code references**: `.github/workflows/ci.yml:95-149`
 - **Diary**: `docs/implementation-diary/3.12.md`
 
@@ -84,12 +84,12 @@ Bring Epic 3 (Core MVP Integration) to implementation sufficiency while recordin
 | 3.9 Graph view | PASS | Backend command registered; UI interactive |
 | 3.10 Watcher UI sync | PASS | Backend events bridged to stores, including `vigil://fs-renamed` from `rename_file` |
 | 3.11 Performance hardening | PASS | Techniques implemented; profiling deferred |
-| 3.12 Build artifacts | PARTIAL | CI packaging configured; local AppImage fails (`linuxdeploy`); CI package evidence pending |
+| 3.12 Build artifacts | PARTIAL | CI packaging configured; local Linux `.deb`/`.rpm` pass with explicit AppImage defer; CI package evidence pending |
 
 ## Next Actions (Ordered)
 
 1. Verify CI `package` job produces Linux/Windows artifacts on this scope.
-2. Resolve local AppImage bundling failure (`failed to run linuxdeploy`) or explicitly defer AppImage for MVP.
+2. Keep AppImage deferred for MVP unless a release requirement explicitly restores it.
 3. Perform runtime smoke testing with Tauri desktop app before production release.
 4. (Post-MVP) Add workspace chooser UX, open-at-line jump, full performance profiling.
 

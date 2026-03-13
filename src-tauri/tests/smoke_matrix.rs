@@ -34,7 +34,10 @@ fn smoke_qa002_open_workspace_loads_tree() {
     fs::write(root.join("subdir/note-b.md"), "# Beta\nMore content").unwrap();
 
     let (ws, resp) = WorkspaceFs::open(root.to_str().unwrap()).unwrap();
-    assert!(resp.files_count >= 2, "Expected at least 2 files in workspace");
+    assert!(
+        resp.files_count >= 2,
+        "Expected at least 2 files in workspace"
+    );
 
     let list_resp = ws.list_dir("").unwrap();
     assert!(
@@ -87,7 +90,10 @@ fn smoke_qa005_fuzzy_find() {
 
     let finder = FuzzyFinder::new(&index);
     let results = finder.fuzzy_find("arch", 10);
-    assert!(!results.is_empty(), "Fuzzy find should return results for 'arch'");
+    assert!(
+        !results.is_empty(),
+        "Fuzzy find should return results for 'arch'"
+    );
     // Both architecture.md and archive.md should match
     assert!(
         results.len() >= 2,

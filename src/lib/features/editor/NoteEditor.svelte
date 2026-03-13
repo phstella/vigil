@@ -27,14 +27,20 @@
 
 	let {
 		filePath,
-		content
+		content: _content
 	}: {
 		filePath: string;
 		content: string;
 	} = $props();
+	// _content accepted for API compat but no longer used after data-loss fix (3.2-fix)
+	void _content;
 
-	// Track which file path we last loaded so we can detect prop changes.
-	let loadedPath: string | null = null;
+	// Track which file path is confirmed loaded in noteStore.
+	let loadedPath = $state<string | null>(null);
+	// Guard against overlapping open() calls while a switch is in flight.
+	let switchingPath = $state<string | null>(null);
+	// Prevent retry loops when a target failed to open/save and props stay unchanged.
+	let blockedPath = $state<string | null>(null);
 
 	// Wikilink autocomplete state
 	let autocompleteVisible = $state(false);
@@ -44,22 +50,40 @@
 	let textareaRef: HTMLTextAreaElement | null = $state(null);
 	let autocompleteRef: WikilinkAutocomplete | null = $state(null);
 
-	// When filePath or content props change, load into the note store.
+	// When filePath changes, switch notes only after open() succeeds.
 	$effect(() => {
-		if (filePath && filePath !== loadedPath) {
-			loadedPath = filePath;
-			// Open via IPC to get etag for optimistic concurrency.
-			// Fall back to direct load if IPC is unavailable (dev/test).
-			const targetPath = filePath;
-			const fallbackContent = content;
-			noteStore.open(targetPath).then((success) => {
+		if (!filePath) return;
+		if (filePath === loadedPath) return;
+		if (switchingPath !== null) return;
+		if (filePath === blockedPath) return;
+
+		const targetPath = filePath;
+		switchingPath = targetPath;
+
+		// Open via IPC to get etag for optimistic concurrency.
+		void noteStore
+			.open(targetPath)
+			.then((success) => {
 				if (!success) {
-					noteStore.load(targetPath, fallbackContent);
+					blockedPath = targetPath;
+					console.warn(
+						'[NoteEditor] switch blocked:',
+						targetPath,
+						'open/save precondition failed - keeping current buffer'
+					);
+					return;
+				}
+
+				loadedPath = targetPath;
+				blockedPath = null;
+				// Update backlinks only after switch is confirmed.
+				void linksStore.setActivePath(targetPath);
+			})
+			.finally(() => {
+				if (switchingPath === targetPath) {
+					switchingPath = null;
 				}
 			});
-			// Update backlinks for the new file
-			void linksStore.setActivePath(filePath);
-		}
 	});
 
 	// When the note saves successfully (dirty becomes false after being true),
@@ -181,7 +205,9 @@
 			stroke="currentColor"
 			stroke-width="1.5"
 		>
-			<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+			<path
+				d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+			/>
 		</svg>
 		<span class="truncate text-xs font-medium text-text-secondary" title={filePath}>
 			{filePath}
@@ -198,14 +224,26 @@
 		>
 			{#if isPreview}
 				<!-- Pencil icon for "switch to edit" -->
-				<svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<svg
+					class="h-3 w-3"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
 					<path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
 					<path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
 				</svg>
 				Edit
 			{:else}
 				<!-- Eye icon for "switch to preview" -->
-				<svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<svg
+					class="h-3 w-3"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+				>
 					<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
 					<circle cx="12" cy="12" r="3" />
 				</svg>
@@ -214,21 +252,14 @@
 		</button>
 
 		{#if noteStore.isSaving}
-			<span
-				class="text-[10px] font-medium text-text-muted"
-				title="Saving..."
-			>saving</span>
+			<span class="text-[10px] font-medium text-text-muted" title="Saving...">saving</span>
 		{:else if noteStore.isDirty}
-			<span
-				class="h-2 w-2 shrink-0 rounded-full bg-accent"
-				title="Unsaved changes"
-			></span>
+			<span class="h-2 w-2 shrink-0 rounded-full bg-accent" title="Unsaved changes"></span>
 		{/if}
 		{#if noteStore.lastError}
-			<span
-				class="ml-1 truncate text-[10px] text-red-400"
-				title={noteStore.lastError}
-			>{noteStore.lastError}</span>
+			<span class="ml-1 truncate text-[10px] text-red-400" title={noteStore.lastError}
+				>{noteStore.lastError}</span
+			>
 		{/if}
 	</header>
 

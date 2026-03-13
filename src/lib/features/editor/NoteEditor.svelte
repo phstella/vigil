@@ -53,6 +53,9 @@
 	// When filePath changes, switch notes only after open() succeeds.
 	$effect(() => {
 		if (!filePath) return;
+		if (blockedPath !== null && filePath !== blockedPath) {
+			blockedPath = null;
+		}
 		if (filePath === loadedPath) return;
 		if (switchingPath !== null) return;
 		if (filePath === blockedPath) return;
@@ -66,6 +69,10 @@
 			.then((success) => {
 				if (!success) {
 					blockedPath = targetPath;
+					const currentPath = noteStore.filePath;
+					if (currentPath) {
+						editorStore.syncNoteIdentity(currentPath, noteStore.content);
+					}
 					console.warn(
 						'[NoteEditor] switch blocked:',
 						targetPath,
@@ -85,6 +92,8 @@
 				}
 			});
 	});
+
+	let displayPath = $derived(noteStore.filePath ?? filePath);
 
 	// When the note saves successfully (dirty becomes false after being true),
 	// schedule a backlinks refresh since the saved content may contain new/removed links.
@@ -209,8 +218,8 @@
 				d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 			/>
 		</svg>
-		<span class="truncate text-xs font-medium text-text-secondary" title={filePath}>
-			{filePath}
+		<span class="truncate text-xs font-medium text-text-secondary" title={displayPath}>
+			{displayPath}
 		</span>
 
 		<!-- View mode toggle button -->

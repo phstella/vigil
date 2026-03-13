@@ -1,6 +1,6 @@
 # Epic 3 Completion Checklist (Post-Recovery)
 
-Updated after recovery orchestration pass on 2026-03-12, with follow-up corrections for gate/evidence claims.
+Updated after recovery orchestration pass on 2026-03-12, with follow-up corrections through 2026-03-13.
 
 ## Metadata
 
@@ -35,7 +35,7 @@ Updated after recovery orchestration pass on 2026-03-12, with follow-up correcti
 | 3.9 | Interactive graph view | `src/lib/features/graph/GraphView.svelte`, `src/lib/features/graph/graph-store.ts`, `src-tauri/src/commands/links.rs` | **FIXED**: `get_note_graph` command added and registered in backend; frontend wired to real IPC; mock fallback retained for graceful degradation | PASS |
 | 3.10 | File-watcher events -> UI sync | `src/lib/features/workspace/file-watcher.ts`, `src/lib/features/explorer/explorer-store.ts` | Watcher bridge wired to explorer/editor/status stores | PASS |
 | 3.11 | Performance hardening vs budget gates | `src/lib/features/editor/CodeEditor.svelte`, `src/lib/features/explorer/FileTree.svelte`, `src/lib/utils/perf.ts` | Lazy Monaco, virtualized tree, perf instrumentation implemented; full budget matrix requires runtime profiling | PASS (deferred: runtime profiling) |
-| 3.12 | Linux/Windows artifacts + smoke matrix | `src-tauri/tauri.conf.json`, `src-tauri/tests/smoke_matrix.rs`, `.github/workflows/ci.yml` | CI `package` job is configured for Linux/Windows artifact builds; first green artifact run for this recovery scope still pending evidence | PARTIAL |
+| 3.12 | Linux/Windows artifacts + smoke matrix | `src-tauri/tauri.conf.json`, `src-tauri/tests/smoke_matrix.rs`, `.github/workflows/ci.yml` | CI `package` job configured for Linux/Windows on push/PR/manual; local `npx tauri build` produces `.deb`/`.rpm` but fails on AppImage (`linuxdeploy`) | PARTIAL |
 
 ## Validation Gates
 
@@ -48,15 +48,14 @@ Frontend:
 
 Rust:
 
-- [ ] `cargo fmt --manifest-path src-tauri/Cargo.toml --all --check`
-- [ ] `cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --manifest-path src-tauri/Cargo.toml --workspace`
+- [x] `cargo fmt --manifest-path src-tauri/Cargo.toml --all --check` — PASS (2026-03-13)
+- [x] `cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings` — PASS (2026-03-13)
+- [x] `cargo test --manifest-path src-tauri/Cargo.toml --workspace` — PASS (2026-03-13)
 
-Rust gate blocker:
+Rust gate evidence:
 
-- Blocker: Local environment does not have `rustc`/`cargo` installed.
-- Mitigation: CI workflow (`.github/workflows/ci.yml`) runs all 3 Rust gates on every push/PR. The `rust` job covers fmt, clippy, and test. The new `package` job validates `tauri build` on Linux and Windows.
-- Risk: Low — Rust code changes in this recovery pass are minimal (one new command function following existing patterns).
+- Local toolchain is now available (`rustc 1.94.0`, `cargo 1.94.0`) and all three required Rust gates pass in this workspace.
+- CI workflow (`.github/workflows/ci.yml`) still enforces the same three gates on push/PR.
 
 ## Runtime Behavior Checks
 
@@ -75,10 +74,9 @@ Rust gate blocker:
 - Open critical risks: **None** (note-switch failure path now guards against retry loops and early backlinks updates)
 - Open high risks: **None** (status re-fetch fixed; graph backend command registered)
 - Open medium risks:
-  - Rust compilation of `get_note_graph` command not verified locally (CI-dependent)
-  - `cargo fmt` not verified locally (CI-dependent)
   - Runtime smoke testing not performed (requires Tauri runtime environment)
-  - Packaging artifacts not yet verified by a successful run tied to this recovery scope
+  - Local packaging remains partial: AppImage bundling fails with `failed to run linuxdeploy` while `.deb`/`.rpm` succeed
+  - Packaging artifacts not yet verified by a successful CI `package` run tied to this recovery scope
 - Deferred items (explicitly accepted at MVP level):
   - Workspace chooser UX — hardcoded `.` path is acceptable for MVP
   - Open-at-line jump from content search results
@@ -87,5 +85,5 @@ Rust gate blocker:
 ## Final Decision
 
 - Decision: `PARTIAL`
-- Rationale: Critical note-switch behavior is now corrected and frontend quality gates pass, but completion-standard release evidence is still incomplete. Rust gates remain unverified locally, runtime smoke checks are unchecked, and packaging artifacts require confirmed CI success for this recovery scope.
+- Rationale: Critical note-switch behavior is now corrected and frontend + Rust quality gates pass locally, but completion-standard release evidence is still incomplete. Runtime smoke checks are unchecked, and packaging evidence is partial due local AppImage failure plus pending CI package confirmation for this scope.
 - Conditions: Attach green Rust + package CI evidence and complete required runtime smoke checks before claiming `PASS`.

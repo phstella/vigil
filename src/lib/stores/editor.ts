@@ -148,6 +148,30 @@ function createEditorStore() {
 		},
 
 		/**
+		 * Realign note-pane identity to the note actually loaded in noteStore.
+		 * Used when a note switch is blocked (e.g., save/open failure) so UI
+		 * path and persistence target stay consistent.
+		 */
+		syncNoteIdentity(path: string, content: string) {
+			update((s) => {
+				const exists = s.openFiles.some((f) => f.path === path);
+				const openFiles: OpenFile[] = exists
+					? s.openFiles
+					: [...s.openFiles, { path, isDirty: false, language: 'markdown' }];
+
+				return {
+					...s,
+					activeFile: path,
+					openFiles,
+					content,
+					language: 'markdown',
+					noteFile: path,
+					noteContent: content
+				};
+			});
+		},
+
+		/**
 		 * Handle a file rename for open editor tabs.
 		 * Updates the path in openFiles and activeFile if affected.
 		 */

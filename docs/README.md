@@ -30,6 +30,12 @@
 ## QA
 - [Test Matrix](qa/test-matrix.md)
 
+## Process
+- [Process Docs Index](process/README.md)
+- [Epic Completion Checklist](process/epic-completion-checklist.md)
+- [Agent Handoff Template](process/agent-handoff-template.md)
+- [PR Review Rubric](process/pr-review-rubric.md)
+
 ## MVP Scope
 
 Epics 0-3 define the MVP baseline. Epic 4 is post-MVP expansion.

@@ -39,9 +39,7 @@ export const GUTTER_DELETED_CLASS = 'vigil-gutter-deleted';
  * - `modified`: teal/blue bar on each modified line
  * - `deleted`: red triangle on the line where deletions occurred
  */
-export function hunksToDecorations(
-	hunks: GitHunk[]
-): Monaco.editor.IModelDeltaDecoration[] {
+export function hunksToDecorations(hunks: GitHunk[]): Monaco.editor.IModelDeltaDecoration[] {
 	const decorations: Monaco.editor.IModelDeltaDecoration[] = [];
 
 	for (const hunk of hunks) {

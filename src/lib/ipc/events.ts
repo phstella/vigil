@@ -25,7 +25,9 @@ export const EVENTS = {
 } as const;
 
 /** Subscribe to file index change notifications. */
-export function onIndexUpdated(handler: (payload: IndexUpdatedPayload) => void): Promise<UnlistenFn> {
+export function onIndexUpdated(
+	handler: (payload: IndexUpdatedPayload) => void
+): Promise<UnlistenFn> {
 	return listenEvent<IndexUpdatedPayload>(EVENTS.INDEX_UPDATED, handler);
 }
 

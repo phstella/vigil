@@ -23,7 +23,7 @@ import { filesStore } from '$lib/stores/files';
 import { editorStore } from '$lib/stores/editor';
 import { gitStore } from '$lib/stores/git';
 import { statusStore } from '$lib/features/status/status-store';
-import { explorerStore } from '$lib/features/explorer/explorer-store';
+import { explorerStore } from '$lib/features/explorer/explorer-store.svelte';
 import type {
 	IndexUpdatedPayload,
 	IndexReadyPayload,

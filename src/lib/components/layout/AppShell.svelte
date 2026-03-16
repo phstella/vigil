@@ -3,8 +3,11 @@
 
 	import type { Snippet } from 'svelte';
 
-	let { titlebar, children, statusbar }: { titlebar: Snippet; children: Snippet; statusbar?: Snippet } =
-		$props();
+	let {
+		titlebar,
+		children,
+		statusbar
+	}: { titlebar: Snippet; children: Snippet; statusbar?: Snippet } = $props();
 </script>
 
 <div class="flex h-screen flex-col overflow-hidden bg-surface-base text-text-primary">

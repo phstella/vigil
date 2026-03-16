@@ -18,7 +18,8 @@ import type {
 
 /** Open (or switch to) a workspace directory. */
 export function openWorkspace(rootPath: string): Promise<OpenWorkspaceResponse> {
-	return invokeCommand<OpenWorkspaceResponse>('open_workspace', { root_path: rootPath });
+	// Tauri command arg names are camelCase on the JS side.
+	return invokeCommand<OpenWorkspaceResponse>('open_workspace', { rootPath });
 }
 
 /** List entries in a workspace directory. Pass `""` for the root. */
@@ -50,8 +51,8 @@ export function createNote(path: string): Promise<CreateNoteResponse> {
 /** Rename or move a file within the workspace. */
 export function renameFile(oldPath: string, newPath: string): Promise<RenameFileResponse> {
 	return invokeCommand<RenameFileResponse>('rename_file', {
-		old_path: oldPath,
-		new_path: newPath
+		oldPath,
+		newPath
 	});
 }
 

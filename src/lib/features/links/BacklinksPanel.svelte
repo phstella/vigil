@@ -6,7 +6,7 @@
 	 * Click on a backlink to navigate to the source note.
 	 */
 
-	import { linksStore } from './links-store';
+	import { linksStore } from './links-store.svelte';
 
 	let {
 		onNavigate
@@ -88,15 +88,23 @@
 								stroke="currentColor"
 								stroke-width="2"
 							>
-								<path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-								<path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+								<path
+									d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"
+								/>
+								<path
+									d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"
+								/>
 							</svg>
-							<span class="truncate text-xs font-medium text-text-secondary group-hover:text-text-primary">
+							<span
+								class="truncate text-xs font-medium text-text-secondary group-hover:text-text-primary"
+							>
 								{backlink.source_path}
 							</span>
 						</div>
 						{#if backlink.context_snippet}
-							<p class="mt-0.5 truncate pl-[18px] text-[11px] leading-relaxed text-text-muted">
+							<p
+								class="mt-0.5 truncate pl-[18px] text-[11px] leading-relaxed text-text-muted"
+							>
 								{backlink.context_snippet}
 							</p>
 						{/if}

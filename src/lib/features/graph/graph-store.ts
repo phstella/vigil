@@ -292,13 +292,8 @@ function createGraphStore() {
 				noteNodes = response.nodes;
 				linkEdges = response.edges;
 			} catch (err) {
-				// Backend command `get_note_graph` is not registered yet (deferred to Epic 4).
-				// Fall back to mock data so the UI remains functional.
-				console.warn(
-					'[graph-store] get_note_graph IPC failed — backend command not available. ' +
-					'Using demo data. This will be resolved in Epic 4.',
-					err
-				);
+				// Backend command not available — falling back to demo data.
+				console.warn('[graph-store] get_note_graph IPC failed — using demo data.', err);
 				noteNodes = MOCK_NODES;
 				linkEdges = MOCK_EDGES;
 				isMock = true;
@@ -388,9 +383,7 @@ function createGraphStore() {
 		moveNode(nodeId: string, x: number, y: number) {
 			store.update((s) => ({
 				...s,
-				nodes: s.nodes.map((nd) =>
-					nd.id === nodeId ? { ...nd, x, y, vx: 0, vy: 0 } : nd
-				)
+				nodes: s.nodes.map((nd) => (nd.id === nodeId ? { ...nd, x, y, vx: 0, vy: 0 } : nd))
 			}));
 		},
 
@@ -413,33 +406,27 @@ function createGraphStore() {
 export const graphStore = createGraphStore();
 
 /** Derived store: edges connected to the selected node. */
-export const selectedEdges = derived(
-	{ subscribe: graphStore.subscribe },
-	($graphState) => {
-		if (!$graphState.selectedNodeId) return new Set<string>();
-		const set = new Set<string>();
-		for (const edge of $graphState.edges) {
-			if (
-				edge.fromId === $graphState.selectedNodeId ||
-				edge.toId === $graphState.selectedNodeId
-			) {
-				set.add(`${edge.fromId}-${edge.toId}`);
-			}
+export const selectedEdges = derived({ subscribe: graphStore.subscribe }, ($graphState) => {
+	if (!$graphState.selectedNodeId) return new Set<string>();
+	const set = new Set<string>();
+	for (const edge of $graphState.edges) {
+		if (
+			edge.fromId === $graphState.selectedNodeId ||
+			edge.toId === $graphState.selectedNodeId
+		) {
+			set.add(`${edge.fromId}-${edge.toId}`);
 		}
-		return set;
 	}
-);
+	return set;
+});
 
 /** Derived store: neighbor node IDs of the selected node. */
-export const selectedNeighbors = derived(
-	{ subscribe: graphStore.subscribe },
-	($graphState) => {
-		if (!$graphState.selectedNodeId) return new Set<string>();
-		const set = new Set<string>();
-		for (const edge of $graphState.edges) {
-			if (edge.fromId === $graphState.selectedNodeId) set.add(edge.toId);
-			if (edge.toId === $graphState.selectedNodeId) set.add(edge.fromId);
-		}
-		return set;
+export const selectedNeighbors = derived({ subscribe: graphStore.subscribe }, ($graphState) => {
+	if (!$graphState.selectedNodeId) return new Set<string>();
+	const set = new Set<string>();
+	for (const edge of $graphState.edges) {
+		if (edge.fromId === $graphState.selectedNodeId) set.add(edge.toId);
+		if (edge.toId === $graphState.selectedNodeId) set.add(edge.fromId);
 	}
-);
+	return set;
+});

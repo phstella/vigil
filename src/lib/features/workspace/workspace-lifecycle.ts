@@ -7,7 +7,7 @@
  */
 
 import { openWorkspace } from '$lib/ipc/files';
-import { explorerStore } from '$lib/features/explorer/explorer-store';
+import { explorerStore } from '$lib/features/explorer/explorer-store.svelte';
 import { filesStore } from '$lib/stores/files';
 
 /**
@@ -32,16 +32,13 @@ export async function openAndLoadWorkspace(rootPath: string): Promise<string> {
 	filesStore.setWorkspace(response.canonical_path);
 
 	// Extract a display name from the canonical path
-	const displayName = response.canonical_path.split('/').pop()
-		?? response.canonical_path.split('\\').pop()
-		?? 'Workspace';
+	const displayName =
+		response.canonical_path.split('/').pop() ??
+		response.canonical_path.split('\\').pop() ??
+		'Workspace';
 
 	// Populate the explorer tree from the real workspace
-	await explorerStore.loadWorkspaceRoot(
-		displayName,
-		response.notes_count,
-		response.files_count
-	);
+	await explorerStore.loadWorkspaceRoot(displayName, response.notes_count, response.files_count);
 
 	return response.canonical_path;
 }

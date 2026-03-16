@@ -1,18 +1,25 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { AppShell, Sidebar, TitleBar, WorkspaceGrid } from '$lib/components/layout';
-	import { PrimaryRail } from '$lib/components/chrome';
-	import { EditorRouter } from '$lib/features/editor';
-	import { Omnibar } from '$lib/features/omnibar';
-	import { StatusBar } from '$lib/features/status';
+	import AppShell from '$lib/components/layout/AppShell.svelte';
+	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import TitleBar from '$lib/components/layout/TitleBar.svelte';
+	import WorkspaceGrid from '$lib/components/layout/WorkspaceGrid.svelte';
+	import PrimaryRail from '$lib/components/chrome/PrimaryRail.svelte';
+	import EditorRouter from '$lib/features/editor/EditorRouter.svelte';
+	import Omnibar from '$lib/features/omnibar/Omnibar.svelte';
+	import StatusBar from '$lib/features/status/StatusBar.svelte';
 	import { statusStore } from '$lib/features/status/status-store';
-	import { initFileWatcher, teardownFileWatcher, openAndLoadWorkspace } from '$lib/features/workspace';
+	import {
+		initFileWatcher,
+		teardownFileWatcher,
+		openAndLoadWorkspace
+	} from '$lib/features/workspace';
 	import { editorStore } from '$lib/stores/editor';
 	import { settingsStore } from '$lib/stores/settings';
 	import { uiStore } from '$lib/stores/ui';
-	import { shortcutRegistry } from '$lib/utils';
-	import { noteStore } from '$lib/features/editor/note-store';
-	import { codeStore, detectLanguage } from '$lib/features/editor/code-store';
+	import { shortcutRegistry } from '$lib/utils/shortcuts';
+	import { noteStore } from '$lib/features/editor/note-store.svelte';
+	import { codeStore, detectLanguage } from '$lib/features/editor/code-store.svelte';
 	import { readFile, writeFile } from '$lib/ipc/files';
 	import { isMarkdownFile } from '$lib/utils/file-routing';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
@@ -149,9 +156,7 @@
 	}
 
 	// Derive whether the right panel should show based on whether a code file is open
-	let showRightPanel = $derived(
-		uiState.rightPanelOpen || editorState.codeFile !== null
-	);
+	let showRightPanel = $derived(uiState.rightPanelOpen || editorState.codeFile !== null);
 
 	onMount(() => {
 		cleanupEditorSubscription = editorStore.subscribe((s) => {
@@ -169,7 +174,9 @@
 		});
 
 		shortcutRegistry.register('ctrl+p', () => uiStore.toggleOmnibar(), { global: true });
-		shortcutRegistry.register('ctrl+shift+f', () => uiStore.openOmnibar('content'), { global: true });
+		shortcutRegistry.register('ctrl+shift+f', () => uiStore.openOmnibar('content'), {
+			global: true
+		});
 		shortcutRegistry.register('ctrl+s', saveCurrentFile, { global: true });
 		shortcutRegistry.register('ctrl+b', () => uiStore.toggleSidebar(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
@@ -180,11 +187,6 @@
 		window.addEventListener('keydown', handleActivity, { capture: true });
 		scheduleSidebarAutoHide();
 
-		// Fetch initial workspace status from backend (falls back to mock data)
-		statusStore.initialize().catch((err) => {
-			console.error('[vigil] failed to initialize status store:', err);
-		});
-
 		// Wire file-watcher events from Rust backend to UI stores
 		initFileWatcher().catch((err) => {
 			console.error('[vigil] failed to initialize file watcher listeners:', err);
@@ -193,10 +195,15 @@
 		// Attempt to open a workspace on startup.
 		// In production, the path comes from CLI args, recent workspaces, or a dialog.
 		// The app gracefully shows an empty explorer if no workspace is opened.
-		openAndLoadWorkspace('.').catch((err) => {
-			// Expected to fail in dev/browser mode; workspace will be opened via user action
-			console.debug('[vigil] initial workspace open skipped or failed:', err);
-		});
+		openAndLoadWorkspace('.')
+			.then(() => {
+				// Re-fetch status now that workspace is open and backend is ready
+				return statusStore.initialize();
+			})
+			.catch((err) => {
+				// Expected to fail in dev/browser mode; workspace will be opened via user action
+				console.debug('[vigil] initial workspace open skipped or failed:', err);
+			});
 	});
 
 	onDestroy(() => {
@@ -231,7 +238,7 @@
 		<TitleBar />
 	{/snippet}
 
-		<WorkspaceGrid>
+	<WorkspaceGrid>
 		{#snippet activityRail()}
 			<PrimaryRail
 				activeSection={uiState.sidebarOpen ? (uiState.sidebarSection as Section) : null}
@@ -281,5 +288,9 @@
 
 <!-- Omnibar overlay, rendered outside the AppShell so it floats above everything -->
 {#if uiState.omnibarOpen}
-	<Omnibar onclose={handleOmnibarClose} onselect={handleOmnibarSelect} initialMode={uiState.omnibarMode} />
+	<Omnibar
+		onclose={handleOmnibarClose}
+		onselect={handleOmnibarSelect}
+		initialMode={uiState.omnibarMode}
+	/>
 {/if}

@@ -12,7 +12,7 @@
 	 * directly to avoid measurement overhead.
 	 */
 
-	import type { TreeNode } from './explorer-store';
+	import type { TreeNode } from './explorer-store.svelte';
 	import FileTreeNode from './FileTreeNode.svelte';
 
 	let {
@@ -49,7 +49,11 @@
 	 * Flatten the tree into a list of visible nodes (respecting expanded state).
 	 * This is the key to virtualization -- we can index into this list by row number.
 	 */
-	function flattenTree(roots: TreeNode[], expandedSet: Set<string>, baseDepth: number): FlatNode[] {
+	function flattenTree(
+		roots: TreeNode[],
+		expandedSet: Set<string>,
+		baseDepth: number
+	): FlatNode[] {
 		const result: FlatNode[] = [];
 		function walk(items: TreeNode[], d: number) {
 			for (const item of items) {

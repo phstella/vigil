@@ -77,7 +77,10 @@
 	function handleWheel(e: WheelEvent) {
 		e.preventDefault();
 		const delta = e.deltaY > 0 ? -1 : 1;
-		graphStore.zoom(delta, e.offsetX, e.offsetY);
+		const rect = containerEl?.getBoundingClientRect();
+		const x = rect ? e.clientX - rect.left : e.offsetX;
+		const y = rect ? e.clientY - rect.top : e.offsetY;
+		graphStore.zoom(delta, x, y);
 	}
 
 	function handleMouseDown(e: MouseEvent) {
@@ -293,17 +296,29 @@
 			<span
 				class="ml-auto rounded bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
 				title="Backend graph command not available yet — showing demo data (Epic 4)"
-			>Demo data</span>
+				>Demo data</span
+			>
 		{/if}
 		{#if graphData.isSimulating}
-			<span class:ml-auto={!graphData.usingMockData} class="text-[9px] text-text-muted">simulating...</span>
+			<span class:ml-auto={!graphData.usingMockData} class="text-[9px] text-text-muted"
+				>simulating...</span
+			>
 		{/if}
 	</div>
 
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 	<!-- Graph canvas -->
 	<div
 		class="relative mx-0 my-0 flex-1 overflow-hidden bg-surface-base"
 		bind:this={containerEl}
+		onmousedown={handleMouseDown}
+		onclick={handleBackgroundClick}
+		onkeydown={handleSvgKeydown}
+		onwheel={handleWheel}
+		tabindex={0}
+		role="application"
+		aria-label="Interactive note graph with {graphData.nodes.length} nodes and {graphData.edges
+			.length} edges"
 	>
 		{#if graphData.isLoading}
 			<div class="flex h-full items-center justify-center">
@@ -318,15 +333,13 @@
 				bind:this={svgEl}
 				class="h-full w-full"
 				style="cursor: {dragMode === 'pan' ? 'grabbing' : 'grab'}"
-				aria-label="Interactive note graph with {graphData.nodes.length} nodes and {graphData.edges.length} edges"
 				role="img"
-				onmousedown={handleMouseDown}
-				onclick={handleBackgroundClick}
-				onkeydown={handleSvgKeydown}
-				onwheel={handleWheel}
-				tabindex={-1}
+				aria-hidden="true"
 			>
-				<g transform="translate({graphData.transform.offsetX}, {graphData.transform.offsetY}) scale({graphData.transform.scale})">
+				<g
+					transform="translate({graphData.transform.offsetX}, {graphData.transform
+						.offsetY}) scale({graphData.transform.scale})"
+				>
 					<!-- Edges -->
 					{#each graphData.edges as edge (edge.fromId + '-' + edge.toId)}
 						{@const fromNode = getNodeById(edge.fromId)}
@@ -372,7 +385,9 @@
 								x={node.x}
 								y={node.y + nodeRadius(node) + FONT_SIZE + 2}
 								text-anchor="middle"
-								fill={node.id === graphData.selectedNodeId ? 'var(--color-text-primary)' : 'var(--color-text-muted)'}
+								fill={node.id === graphData.selectedNodeId
+									? 'var(--color-text-primary)'
+									: 'var(--color-text-muted)'}
 								font-size={FONT_SIZE}
 								font-family="var(--font-sans)"
 								pointer-events="none"

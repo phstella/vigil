@@ -14,26 +14,23 @@
 	 */
 
 	import { onDestroy } from 'svelte';
-	import { noteStore } from './note-store';
+	import { noteStore } from './note-store.svelte';
 	import InlinePreview from '$lib/features/preview/InlinePreview.svelte';
 	import BacklinksPanel from '$lib/features/links/BacklinksPanel.svelte';
 	import WikilinkAutocomplete from '$lib/features/links/WikilinkAutocomplete.svelte';
-	import { linksStore } from '$lib/features/links/links-store';
+	import { linksStore } from '$lib/features/links/links-store.svelte';
 	import { detectWikilinkTrigger, insertWikilink } from '$lib/utils/markdown';
 	import { editorStore } from '$lib/stores/editor';
 	import { readFile } from '$lib/ipc/files';
 	import { isMarkdownFile } from '$lib/utils/file-routing';
-	import { detectLanguage } from './code-store';
+	import { detectLanguage } from './code-store.svelte';
 
 	let {
-		filePath,
-		content: _content
+		filePath
 	}: {
 		filePath: string;
-		content: string;
+		content?: string;
 	} = $props();
-	// _content accepted for API compat but no longer used after data-loss fix (3.2-fix)
-	void _content;
 
 	// Track which file path is confirmed loaded in noteStore.
 	let loadedPath = $state<string | null>(null);

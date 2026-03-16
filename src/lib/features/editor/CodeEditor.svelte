@@ -18,12 +18,13 @@
 	 */
 
 	import { onMount, onDestroy } from 'svelte';
-	import { codeStore } from './code-store';
+	import { codeStore } from './code-store.svelte';
 	import {
 		loadMonaco,
 		getDefaultEditorOptions,
 		detectMonacoLanguage,
-		VIGIL_THEME_NAME
+		VIGIL_THEME_NAME,
+		isMonacoLoaded
 	} from './monaco-config';
 	import { GutterController } from '$lib/features/git/gutter';
 	import { onGitHunks } from '$lib/ipc/events';
@@ -47,6 +48,7 @@
 
 	// Track the last filePath we set up so we can detect file switches
 	let currentFilePath: string | null = null;
+	let lastAppliedPropContent: string | null = null;
 
 	// Git gutter controller
 	let gutterController: GutterController | null = null;
@@ -67,26 +69,36 @@
 		// Read these to track them as dependencies
 		const fp = filePath;
 		const ct = content;
+		const model = editor.getModel();
+		if (!model) return;
+		const didSwitchFile = fp !== currentFilePath;
 
-		if (fp !== currentFilePath) {
-			// File switched -- update model language and content
+		if (didSwitchFile) {
+			// File switched -- update model language.
 			const lang = detectMonacoLanguage(fp);
-			const model = editor.getModel();
-			if (model) {
-				monacoRef.editor.setModelLanguage(model, lang);
-				// Avoid triggering our own onDidChangeModelContent handler
-				model.setValue(ct);
-			}
+			monacoRef.editor.setModelLanguage(model, lang);
 			currentFilePath = fp;
 
 			// Update git gutter for the new file
 			gutterController?.setFilePath(fp);
 		}
+
+		// Content can arrive asynchronously after the file path changes.
+		// Keep Monaco in sync whenever upstream props publish new content.
+		if (didSwitchFile || ct !== lastAppliedPropContent) {
+			if (model.getValue() !== ct) {
+				// Avoid triggering our own onDidChangeModelContent handler with redundant writes.
+				model.setValue(ct);
+			}
+			lastAppliedPropContent = ct;
+		}
 	});
 
 	onMount(async () => {
 		if (!containerEl) return;
-		const mountTimer = perfTimer('editor-mount', 120);
+
+		// First Monaco boot includes dynamic import + worker spin-up, so use a wider cold-start budget.
+		const mountTimer = perfTimer('editor-mount', isMonacoLoaded() ? 120 : 500);
 
 		try {
 			monacoRef = await loadMonaco();
@@ -104,6 +116,7 @@
 			monacoRef.editor.setTheme(VIGIL_THEME_NAME);
 
 			currentFilePath = filePath;
+			lastAppliedPropContent = content;
 
 			// Initialize git gutter controller
 			gutterController = new GutterController(editor);
@@ -177,9 +190,7 @@
 			{codeStore.language}
 		</span>
 		{#if codeStore.isDirty}
-			<span
-				class="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent"
-				title="Unsaved changes"
+			<span class="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent" title="Unsaved changes"
 			></span>
 		{/if}
 	</header>

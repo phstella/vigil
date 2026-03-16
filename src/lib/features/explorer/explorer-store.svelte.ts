@@ -12,8 +12,9 @@ import type { DirEntry } from '$lib/types/store';
 import { listDir, readFile } from '$lib/ipc/files';
 import { editorStore } from '$lib/stores/editor';
 import { isMarkdownFile } from '$lib/utils/file-routing';
-import { detectLanguage } from '$lib/features/editor/code-store';
+import { detectLanguage } from '$lib/features/editor/code-store.svelte';
 import { uiStore } from '$lib/stores/ui';
+import { SvelteSet } from 'svelte/reactivity';
 
 /** A tree node extends DirEntry with optional children for recursive rendering. */
 export interface TreeNode extends DirEntry {
@@ -149,10 +150,11 @@ function createExplorerStore() {
 	let workspaceName = $state<string>('');
 	let notesCount = $state<number>(0);
 	let filesCount = $state<number>(0);
-	let expandedDirs = $state<Set<string>>(new Set<string>());
+	let expandedDirs = new SvelteSet<string>();
 	let selectedFile = $state<string | null>(null);
 	let loading = $state<boolean>(false);
 	let error = $state<string | null>(null);
+	let fileSelectionRequestId = 0;
 
 	const collections = $derived.by(() => {
 		return tree
@@ -217,9 +219,10 @@ function createExplorerStore() {
 				tree = response.entries.map(entryToTreeNode);
 				loading = false;
 			} catch (err: unknown) {
-				const msg = err && typeof err === 'object' && 'message' in err
-					? (err as { message: string }).message
-					: 'Failed to load workspace root';
+				const msg =
+					err && typeof err === 'object' && 'message' in err
+						? (err as { message: string }).message
+						: 'Failed to load workspace root';
 				error = msg;
 				loading = false;
 				console.error('[explorer] failed to load workspace root:', err);
@@ -231,16 +234,13 @@ function createExplorerStore() {
 		 * When expanding, lazily loads children via listDir if not yet loaded.
 		 */
 		async toggleExpand(path: string) {
-			const next = new Set(expandedDirs);
-			if (next.has(path)) {
-				next.delete(path);
-				expandedDirs = next;
+			if (expandedDirs.has(path)) {
+				expandedDirs.delete(path);
 				return;
 			}
 
 			// Expanding: check if children need loading
-			next.add(path);
-			expandedDirs = next;
+			expandedDirs.add(path);
 
 			// Find the node to check if children are loaded
 			const node = findNode(tree, path);
@@ -257,10 +257,15 @@ function createExplorerStore() {
 
 		/** Select a file by path and open it in the appropriate editor pane via IPC readFile. */
 		async selectFile(path: string) {
+			const requestId = ++fileSelectionRequestId;
 			selectedFile = path;
 
 			try {
 				const response = await readFile(path);
+				// Ignore stale reads if the user selected another file while this one was loading.
+				if (requestId !== fileSelectionRequestId || selectedFile !== path) {
+					return;
+				}
 				const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
 				editorStore.openFile(path, response.content, language);
 
@@ -269,6 +274,10 @@ function createExplorerStore() {
 					uiStore.openRightPanel();
 				}
 			} catch (err) {
+				// Ignore stale failures for no-longer-selected files.
+				if (requestId !== fileSelectionRequestId || selectedFile !== path) {
+					return;
+				}
 				console.error('[explorer] failed to read file:', path, err);
 				// Still open the file with empty content so the tab exists
 				const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
@@ -325,11 +334,12 @@ function createExplorerStore() {
 		 * Reset the explorer to empty state (e.g. when switching workspaces).
 		 */
 		reset() {
+			fileSelectionRequestId += 1;
 			tree = [];
 			workspaceName = '';
 			notesCount = 0;
 			filesCount = 0;
-			expandedDirs = new Set<string>();
+			expandedDirs = new SvelteSet<string>();
 			selectedFile = null;
 			loading = false;
 			error = null;

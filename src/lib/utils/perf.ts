@@ -12,7 +12,10 @@
 
 /** Check whether perf logging is enabled. */
 function isPerfEnabled(): boolean {
-	if (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>)['VIGIL_PERF']) {
+	if (
+		typeof window !== 'undefined' &&
+		(window as unknown as Record<string, unknown>)['VIGIL_PERF']
+	) {
 		return true;
 	}
 	// Always log in dev mode

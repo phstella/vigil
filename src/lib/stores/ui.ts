@@ -36,7 +36,11 @@ function createUiStore() {
 
 		/** Toggle the omnibar overlay (defaults to file mode). */
 		toggleOmnibar() {
-			update((s) => ({ ...s, omnibarOpen: !s.omnibarOpen, omnibarMode: s.omnibarOpen ? s.omnibarMode : 'file' }));
+			update((s) => ({
+				...s,
+				omnibarOpen: !s.omnibarOpen,
+				omnibarMode: s.omnibarOpen ? s.omnibarMode : 'file'
+			}));
 		},
 
 		/** Open the omnibar in a specific mode. */

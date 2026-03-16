@@ -41,9 +41,13 @@
 				(pane === 'auto' && !isMarkdownFile(filePath)))
 	);
 
-	// Lazy-load CodeEditor component to keep Monaco out of the initial bundle.
-	// The promise is created once and cached by the module system.
-	const CodeEditorModule = import('./CodeEditor.svelte');
+	// Lazy-load CodeEditor only when the code pane is actually needed.
+	let CodeEditorModule = $state<Promise<typeof import('./CodeEditor.svelte')> | null>(null);
+	$effect(() => {
+		if (shouldRenderCode && CodeEditorModule === null) {
+			CodeEditorModule = import('./CodeEditor.svelte');
+		}
+	});
 
 	// Instrument pane switch rendering
 	$effect(() => {
@@ -60,17 +64,25 @@
 {#if shouldRenderNote}
 	<NoteEditor filePath={filePath!} {content} />
 {:else if shouldRenderCode}
-	{#await CodeEditorModule}
+	{#if CodeEditorModule}
+		{#await CodeEditorModule}
+			<div class="flex h-full items-center justify-center bg-surface-base">
+				<span class="text-sm text-text-muted">Loading editor...</span>
+			</div>
+		{:then mod}
+			{#key filePath}
+				<mod.default filePath={filePath!} {content} />
+			{/key}
+		{:catch}
+			<div class="flex h-full items-center justify-center bg-surface-base">
+				<span class="text-sm text-error">Failed to load code editor</span>
+			</div>
+		{/await}
+	{:else}
 		<div class="flex h-full items-center justify-center bg-surface-base">
 			<span class="text-sm text-text-muted">Loading editor...</span>
 		</div>
-	{:then mod}
-		<mod.default filePath={filePath!} {content} />
-	{:catch}
-		<div class="flex h-full items-center justify-center bg-surface-base">
-			<span class="text-sm text-error">Failed to load code editor</span>
-		</div>
-	{/await}
+	{/if}
 {:else}
 	<div class="flex h-full items-center justify-center bg-surface-base p-4">
 		<div class="text-center">

@@ -11,7 +11,7 @@
 	 * Highlights the row when it is the currently selected item.
 	 */
 
-	import type { OmnibarResult } from './omnibar-store';
+	import type { OmnibarResult } from './omnibar-store.svelte';
 
 	let {
 		item,
@@ -127,7 +127,9 @@
 	role="option"
 	aria-selected={isSelected}
 >
-	<span class="shrink-0 text-sm" aria-hidden="true">{fileIcon(item.ext, item.type === 'file' ? item.kind : undefined)}</span>
+	<span class="shrink-0 text-sm" aria-hidden="true"
+		>{fileIcon(item.ext, item.type === 'file' ? item.kind : undefined)}</span
+	>
 	<span class="flex min-w-0 flex-1 flex-col">
 		{#if item.type === 'file'}
 			<!-- File mode: name with fuzzy-match highlighting -->
@@ -147,7 +149,11 @@
 			<span class="truncate text-sm font-medium">
 				{item.name}<span class="ml-1 text-xs text-text-muted">:{item.lineNumber}</span>
 			</span>
-			{@const previewSegments = highlightByColumns(item.preview, item.lineStartCol, item.lineEndCol)}
+			{@const previewSegments = highlightByColumns(
+				item.preview,
+				item.lineStartCol,
+				item.lineEndCol
+			)}
 			<span class="truncate text-xs text-text-muted font-mono">
 				{#each previewSegments as seg, idx (idx)}
 					{#if seg.highlighted}

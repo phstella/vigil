@@ -213,6 +213,77 @@ export function detectMonacoLanguage(filePath: string): string {
 
 /** Cached reference to avoid re-importing. */
 let monacoInstance: typeof Monaco | null = null;
+let monacoEnvironmentConfigured = false;
+let monacoWorkerConstructorsPromise: Promise<MonacoWorkerConstructors> | null = null;
+
+type WorkerCtor = new () => Worker;
+interface MonacoWorkerConstructors {
+	EditorWorker: WorkerCtor;
+	JsonWorker: WorkerCtor;
+	CssWorker: WorkerCtor;
+	HtmlWorker: WorkerCtor;
+	TsWorker: WorkerCtor;
+}
+
+async function loadMonacoWorkerConstructors(): Promise<MonacoWorkerConstructors> {
+	if (monacoWorkerConstructorsPromise) {
+		return monacoWorkerConstructorsPromise;
+	}
+
+	monacoWorkerConstructorsPromise = Promise.all([
+		import('monaco-editor/esm/vs/editor/editor.worker?worker'),
+		import('monaco-editor/esm/vs/language/json/json.worker?worker'),
+		import('monaco-editor/esm/vs/language/css/css.worker?worker'),
+		import('monaco-editor/esm/vs/language/html/html.worker?worker'),
+		import('monaco-editor/esm/vs/language/typescript/ts.worker?worker')
+	]).then(([editor, json, css, html, ts]) => ({
+		EditorWorker: editor.default,
+		JsonWorker: json.default,
+		CssWorker: css.default,
+		HtmlWorker: html.default,
+		TsWorker: ts.default
+	}));
+
+	return monacoWorkerConstructorsPromise;
+}
+
+async function configureMonacoEnvironment() {
+	if (monacoEnvironmentConfigured || typeof window === 'undefined') return;
+	monacoEnvironmentConfigured = true;
+	const workers = await loadMonacoWorkerConstructors();
+
+	const target = globalThis as typeof globalThis & {
+		MonacoEnvironment?: {
+			getWorker: (_moduleId: string, label: string) => Worker;
+		};
+	};
+
+	target.MonacoEnvironment = {
+		getWorker(_moduleId: string, label: string): Worker {
+			switch (label) {
+				case 'json':
+					return new workers.JsonWorker();
+				case 'css':
+				case 'scss':
+				case 'less':
+					return new workers.CssWorker();
+				case 'html':
+				case 'handlebars':
+				case 'razor':
+					return new workers.HtmlWorker();
+				case 'typescript':
+				case 'javascript':
+					return new workers.TsWorker();
+				default:
+					return new workers.EditorWorker();
+			}
+		}
+	};
+}
+
+export function isMonacoLoaded(): boolean {
+	return monacoInstance !== null;
+}
 
 /**
  * Lazily load the Monaco editor module.
@@ -223,6 +294,7 @@ let monacoInstance: typeof Monaco | null = null;
  */
 export async function loadMonaco(): Promise<typeof Monaco> {
 	if (monacoInstance) return monacoInstance;
+	await configureMonacoEnvironment();
 
 	const monaco = await import('monaco-editor');
 	monacoInstance = monaco;

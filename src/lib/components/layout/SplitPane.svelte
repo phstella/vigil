@@ -88,7 +88,8 @@
 	<!-- First panel -->
 	<div
 		class="min-h-0 min-w-0 overflow-auto"
-		style="{direction === 'horizontal' ? 'width' : 'height'}: calc({splitPct}% - {DIVIDER_PX / 2}px)"
+		style="{direction === 'horizontal' ? 'width' : 'height'}: calc({splitPct}% - {DIVIDER_PX /
+			2}px)"
 	>
 		{@render first()}
 	</div>
@@ -119,7 +120,8 @@
 	<!-- Second panel -->
 	<div
 		class="min-h-0 min-w-0 overflow-auto"
-		style="{direction === 'horizontal' ? 'width' : 'height'}: calc({100 - splitPct}% - {DIVIDER_PX / 2}px)"
+		style="{direction === 'horizontal' ? 'width' : 'height'}: calc({100 -
+			splitPct}% - {DIVIDER_PX / 2}px)"
 	>
 		{@render second()}
 	</div>

@@ -53,10 +53,7 @@ function renderInline(text: string): string {
 	);
 
 	// Standard markdown links [text](url)
-	result = result.replace(
-		/\[([^\]]+)\]\(([^)]+)\)/g,
-		'<a class="md-link" href="$2">$1</a>'
-	);
+	result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a class="md-link" href="$2">$1</a>');
 
 	// Strikethrough ~~text~~
 	result = result.replace(/~~(.+?)~~/g, '<del>$1</del>');
@@ -217,7 +214,10 @@ export function markdownToHtml(markdown: string): string {
 		// Blockquote
 		if (line.startsWith('>')) {
 			const quoteLines: string[] = [];
-			while (i < lines.length && (lines[i].startsWith('>') || (lines[i].trim() !== '' && quoteLines.length > 0))) {
+			while (
+				i < lines.length &&
+				(lines[i].startsWith('>') || (lines[i].trim() !== '' && quoteLines.length > 0))
+			) {
 				if (lines[i].startsWith('>')) {
 					quoteLines.push(lines[i].replace(/^>\s?/, ''));
 				} else {

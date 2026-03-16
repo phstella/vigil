@@ -52,24 +52,52 @@
 			{/if}
 
 			{#if section.id === 'explorer'}
-				<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-					<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+				<svg
+					class="h-5 w-5"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+				>
+					<path
+						d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+					/>
 				</svg>
 			{:else if section.id === 'search'}
-				<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+				<svg
+					class="h-5 w-5"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+				>
 					<circle cx="11" cy="11" r="7" />
 					<path d="M16 16l4.5 4.5" />
 				</svg>
 			{:else if section.id === 'graph'}
-				<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+				<svg
+					class="h-5 w-5"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+				>
 					<circle cx="6" cy="6" r="2.5" />
 					<circle cx="18" cy="6" r="2.5" />
 					<circle cx="12" cy="18" r="2.5" />
 					<path d="M8 7.5l4 8M16 7.5l-4 8M8.5 6h7" />
 				</svg>
 			{:else if section.id === 'tags'}
-				<svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-					<path d="M7 7h.01M3 12l8.5-8.5a1 1 0 01.7-.3H19a1 1 0 011 1v6.8a1 1 0 01-.3.7L12 20l-9-8z" />
+				<svg
+					class="h-5 w-5"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.5"
+				>
+					<path
+						d="M7 7h.01M3 12l8.5-8.5a1 1 0 01.7-.3H19a1 1 0 011 1v6.8a1 1 0 01-.3.7L12 20l-9-8z"
+					/>
 				</svg>
 			{/if}
 		</button>

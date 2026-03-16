@@ -9,7 +9,7 @@
 	 * Clicking the backdrop also closes the overlay.
 	 */
 
-	import { omnibarStore } from './omnibar-store';
+	import { omnibarStore } from './omnibar-store.svelte';
 	import OmnibarItem from './OmnibarItem.svelte';
 	import { perfTimer } from '$lib/utils/perf';
 	import type { OmnibarMode } from '$lib/types/store';
@@ -60,7 +60,8 @@
 				e.preventDefault();
 				const selected = omnibarStore.selectCurrent();
 				if (selected) {
-					const lineNumber = selected.type === 'content' ? selected.lineNumber : undefined;
+					const lineNumber =
+						selected.type === 'content' ? selected.lineNumber : undefined;
 					onselect?.(selected.path, lineNumber);
 					onclose();
 				}
@@ -102,15 +103,11 @@
 	}
 
 	let placeholderText = $derived(
-		omnibarStore.mode === 'content'
-			? 'Search file contents...'
-			: 'Type to search files...'
+		omnibarStore.mode === 'content' ? 'Search file contents...' : 'Type to search files...'
 	);
 
 	let emptyMessage = $derived(
-		omnibarStore.mode === 'content'
-			? 'No content matches found.'
-			: 'No matching files found.'
+		omnibarStore.mode === 'content' ? 'No content matches found.' : 'No matching files found.'
 	);
 </script>
 
@@ -130,7 +127,8 @@
 		<div class="flex border-b border-surface-border">
 			<button
 				type="button"
-				class="flex-1 px-3 py-1.5 text-xs font-medium transition-colors {omnibarStore.mode === 'file'
+				class="flex-1 px-3 py-1.5 text-xs font-medium transition-colors {omnibarStore.mode ===
+				'file'
 					? 'border-b-2 border-accent text-accent'
 					: 'text-text-muted hover:text-text-secondary'}"
 				onclick={() => switchMode('file')}
@@ -140,7 +138,8 @@
 			</button>
 			<button
 				type="button"
-				class="flex-1 px-3 py-1.5 text-xs font-medium transition-colors {omnibarStore.mode === 'content'
+				class="flex-1 px-3 py-1.5 text-xs font-medium transition-colors {omnibarStore.mode ===
+				'content'
 					? 'border-b-2 border-accent text-accent'
 					: 'text-text-muted hover:text-text-secondary'}"
 				onclick={() => switchMode('content')}
@@ -159,7 +158,12 @@
 				aria-hidden="true"
 			>
 				<circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" />
-				<path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+				<path
+					d="M11 11l3 3"
+					stroke="currentColor"
+					stroke-width="1.5"
+					stroke-linecap="round"
+				/>
 			</svg>
 			<input
 				bind:this={inputEl}
@@ -180,7 +184,12 @@
 		</div>
 
 		<!-- Results list -->
-		<div id="omnibar-results" class="overflow-y-auto" role="listbox" aria-label="Search results">
+		<div
+			id="omnibar-results"
+			class="overflow-y-auto"
+			role="listbox"
+			aria-label="Search results"
+		>
 			{#if omnibarStore.error}
 				<div class="px-3 py-4 text-center text-sm text-red-400">{omnibarStore.error}</div>
 			{:else if omnibarStore.results.length > 0}
@@ -189,7 +198,8 @@
 						{item}
 						isSelected={i === omnibarStore.selectedIndex}
 						onclick={() => {
-							const lineNumber = item.type === 'content' ? item.lineNumber : undefined;
+							const lineNumber =
+								item.type === 'content' ? item.lineNumber : undefined;
 							handleItemClick(item.path, lineNumber);
 						}}
 					/>

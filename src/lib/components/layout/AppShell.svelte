@@ -1,5 +1,6 @@
 <script lang="ts">
-	// Top-level app shell arranging TitleBar (top), main content (middle), StatusBar slot (bottom).
+	// Top-level app shell arranging optional title bar (top), main content (middle),
+	// and optional status bar (bottom).
 
 	import type { Snippet } from 'svelte';
 
@@ -7,11 +8,13 @@
 		titlebar,
 		children,
 		statusbar
-	}: { titlebar: Snippet; children: Snippet; statusbar?: Snippet } = $props();
+	}: { titlebar?: Snippet; children: Snippet; statusbar?: Snippet } = $props();
 </script>
 
 <div class="flex h-screen flex-col overflow-hidden bg-surface-base text-text-primary">
-	{@render titlebar()}
+	{#if titlebar}
+		{@render titlebar()}
+	{/if}
 
 	<main class="flex min-h-0 flex-1">
 		{@render children()}

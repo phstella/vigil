@@ -155,6 +155,16 @@
 		console.log('[shortcut] create new note');
 	}
 
+	/** Handle tab activation from the tab bar. */
+	function handleTabActivate(path: string) {
+		editorStore.activateTab(path);
+	}
+
+	/** Handle tab close from the tab bar. */
+	function handleTabClose(path: string) {
+		editorStore.closeFile(path);
+	}
+
 	// Side-by-side is an explicit user mode. Default editing uses a single adaptive pane.
 	let sideBySideMode = $derived(uiState.rightPanelOpen);
 
@@ -195,6 +205,10 @@
 		shortcutRegistry.register('ctrl+\\', () => uiStore.toggleRightPanel(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
 		shortcutRegistry.register('ctrl+.', () => noteStore.toggleViewMode(), { global: true });
+		// Tab navigation shortcuts
+		shortcutRegistry.register('ctrl+tab', () => editorStore.nextTab(), { global: true });
+		shortcutRegistry.register('ctrl+shift+tab', () => editorStore.prevTab(), { global: true });
+		shortcutRegistry.register('ctrl+w', () => editorStore.closeActiveTab(), { global: true });
 
 		window.addEventListener('mousemove', handleActivity, { capture: true, passive: true });
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
@@ -228,6 +242,9 @@
 		shortcutRegistry.unregister('ctrl+\\');
 		shortcutRegistry.unregister('ctrl+n');
 		shortcutRegistry.unregister('ctrl+.');
+		shortcutRegistry.unregister('ctrl+tab');
+		shortcutRegistry.unregister('ctrl+shift+tab');
+		shortcutRegistry.unregister('ctrl+w');
 
 		window.removeEventListener('mousemove', handleActivity, { capture: true });
 		window.removeEventListener('mousedown', handleActivity, { capture: true });
@@ -284,10 +301,20 @@
 				filePath={editorState.noteFile}
 				content={editorState.noteContent}
 				pane="note"
+				tabs={editorState.openFiles}
+				onactivatetab={handleTabActivate}
+				onclosetab={handleTabClose}
 			/>
 		{:else}
 			<!-- Default mode: one pane that switches between note/code by active file type. -->
-			<EditorRouter filePath={activePaneFile} content={activePaneContent} pane="auto" />
+			<EditorRouter
+				filePath={activePaneFile}
+				content={activePaneContent}
+				pane="auto"
+				tabs={editorState.openFiles}
+				onactivatetab={handleTabActivate}
+				onclosetab={handleTabClose}
+			/>
 		{/if}
 	</WorkspaceGrid>
 

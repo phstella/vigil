@@ -13,3 +13,6 @@ Notes:
 - Task details come from `docs/tickets/epic-3.5-editor-workflow-stability.md`.
 - If any document conflicts, canonical backlog/execution-order win.
 - Each task requires an append-only diary at `docs/implementation-diary/{TASK_ID}.md`.
+- PASS requires evidence-based completion: frontend + rust gates, acceptance mapping, and runtime smoke for UI/runtime-risk tasks.
+- If runtime smoke cannot run locally, task must be reported as `PARTIAL` with blocker and impact.
+- Epic closeout must include `docs/process/epic-completion-checklist.md` and a handoff generated from `docs/process/agent-handoff-template.md`.

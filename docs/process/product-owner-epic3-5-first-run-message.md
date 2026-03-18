@@ -43,6 +43,11 @@ Quality gates required per completed task:
 - cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
 - cargo test --manifest-path src-tauri/Cargo.toml --workspace
 
+Runtime evidence rules:
+- 3.5.3 requires Linux runtime smoke evidence (no reset/crash, no repeated worker error loop).
+- 3.5.5 requires Mermaid runtime smoke evidence for both valid and invalid diagrams.
+- If runtime evidence is missing, mark task `PARTIAL` with blocker/impact; do not mark `PASS`.
+
 Closeout requirements:
 - Update epic checklist with real statuses.
 - Produce a final handoff using:

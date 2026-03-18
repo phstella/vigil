@@ -22,35 +22,9 @@ export interface TreeNode extends DirEntry {
 	childrenLoaded?: boolean;
 }
 
-export interface CollectionSummary {
-	name: string;
-	path: string;
-	filesCount: number;
-	notesCount: number;
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function summarizeNode(node: TreeNode): { filesCount: number; notesCount: number } {
-	if (node.kind === 'file') {
-		return {
-			filesCount: 1,
-			notesCount: node.ext === 'md' ? 1 : 0
-		};
-	}
-
-	let filesCount = 0;
-	let notesCount = 0;
-	for (const child of node.children ?? []) {
-		const childSummary = summarizeNode(child);
-		filesCount += childSummary.filesCount;
-		notesCount += childSummary.notesCount;
-	}
-
-	return { filesCount, notesCount };
-}
 
 /** Convert a DirEntry from listDir into a TreeNode. */
 function entryToTreeNode(entry: DirEntry): TreeNode {
@@ -128,12 +102,6 @@ export interface ExplorerState {
 	tree: TreeNode[];
 	/** Workspace display name. */
 	workspaceName: string;
-	/** Total markdown note count for the workspace. */
-	notesCount: number;
-	/** Total file count for the workspace. */
-	filesCount: number;
-	/** Top-level collection summaries for explorer header display. */
-	collections: CollectionSummary[];
 	/** Set of expanded directory paths. */
 	expandedDirs: Set<string>;
 	/** Currently selected file path, or null. */
@@ -147,31 +115,11 @@ export interface ExplorerState {
 function createExplorerStore() {
 	let tree = $state<TreeNode[]>([]);
 	let workspaceName = $state<string>('');
-	let notesCount = $state<number>(0);
-	let filesCount = $state<number>(0);
 	let expandedDirs = new SvelteSet<string>();
 	let selectedFile = $state<string | null>(null);
 	let loading = $state<boolean>(false);
 	let error = $state<string | null>(null);
 	let fileSelectionRequestId = 0;
-
-	const collections = $derived.by(() => {
-		return tree
-			.filter((node): node is TreeNode & { kind: 'dir' } => node.kind === 'dir')
-			.map((node) => {
-				const summary = summarizeNode(node);
-				return {
-					name: node.name,
-					path: node.path,
-					filesCount: summary.filesCount,
-					notesCount: summary.notesCount
-				};
-			});
-	});
-
-	const derivedNotesCount = $derived.by(() => {
-		return tree.reduce((sum, node) => sum + summarizeNode(node).notesCount, 0);
-	});
 
 	return {
 		get tree() {
@@ -179,15 +127,6 @@ function createExplorerStore() {
 		},
 		get workspaceName() {
 			return workspaceName;
-		},
-		get notesCount() {
-			return notesCount || derivedNotesCount;
-		},
-		get filesCount() {
-			return filesCount;
-		},
-		get collections() {
-			return collections;
 		},
 		get expandedDirs() {
 			return expandedDirs;
@@ -206,12 +145,11 @@ function createExplorerStore() {
 		 * Initialize the explorer with workspace root data.
 		 * Called after openWorkspace succeeds.
 		 */
-		async loadWorkspaceRoot(name: string, rootNotesCount: number, rootFilesCount: number) {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		async loadWorkspaceRoot(name: string, _rootNotesCount?: number, _rootFilesCount?: number) {
 			loading = true;
 			error = null;
 			workspaceName = name;
-			notesCount = rootNotesCount;
-			filesCount = rootFilesCount;
 
 			try {
 				const response = await listDir('');
@@ -331,8 +269,6 @@ function createExplorerStore() {
 			fileSelectionRequestId += 1;
 			tree = [];
 			workspaceName = '';
-			notesCount = 0;
-			filesCount = 0;
 			expandedDirs = new SvelteSet<string>();
 			selectedFile = null;
 			loading = false;

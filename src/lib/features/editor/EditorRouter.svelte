@@ -27,6 +27,7 @@
 		content = '',
 		pane = 'auto',
 		tabs = [],
+		activeTab = null,
 		onactivatetab,
 		onclosetab
 	}: {
@@ -34,6 +35,8 @@
 		content?: string;
 		pane?: 'note' | 'code' | 'auto';
 		tabs?: OpenFile[];
+		/** Globally active tab path (may differ from filePath in split mode). */
+		activeTab?: string | null;
 		onactivatetab?: (path: string) => void;
 		onclosetab?: (path: string) => void;
 	} = $props();
@@ -111,7 +114,7 @@
 			aria-label="Open files"
 		>
 			{#each tabs as tab (tab.path)}
-				{@const isActive = tab.path === filePath}
+				{@const isActive = tab.path === (activeTab ?? filePath)}
 				<div
 					class="group flex max-w-[180px] shrink-0 cursor-pointer items-center gap-1 border-r border-surface-border px-2 text-xs transition-colors"
 					class:bg-surface-base={isActive}
@@ -128,7 +131,9 @@
 				>
 					<!-- File type indicator -->
 					{#if isMarkdownFile(tab.path)}
-						<span class="shrink-0 text-[10px] font-semibold text-accent opacity-60">MD</span>
+						<span class="shrink-0 text-[10px] font-semibold text-accent opacity-60"
+							>MD</span
+						>
 					{:else}
 						<span class="shrink-0 text-[10px] font-semibold text-text-muted opacity-40"
 							>&lt;/&gt;</span

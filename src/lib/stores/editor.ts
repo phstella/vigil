@@ -31,10 +31,7 @@ function createEditorStore() {
 	/**
 	 * Restore state fields from a tab's cached data.
 	 */
-	function restoreFromTab(
-		s: EditorState,
-		tab: OpenFile
-	): Partial<EditorState> {
+	function restoreFromTab(s: EditorState, tab: OpenFile): Partial<EditorState> {
 		const base: Partial<EditorState> = {
 			activeFile: tab.path,
 			content: tab.content,
@@ -70,9 +67,7 @@ function createEditorStore() {
 
 				const exists = cachedFiles.some((f) => f.path === path);
 				const openFiles: OpenFile[] = exists
-					? cachedFiles.map((f) =>
-							f.path === path ? { ...f, content, language } : f
-						)
+					? cachedFiles.map((f) => (f.path === path ? { ...f, content, language } : f))
 					: [...cachedFiles, { path, isDirty: false, language, content }];
 
 				const base = {
@@ -195,13 +190,11 @@ function createEditorStore() {
 				const result = { ...s, activeFile, openFiles, content, language, isDirty };
 				if (isMarkdownFile(path) && s.noteFile === path) {
 					result.noteFile = activeFile && isMarkdownFile(activeFile) ? activeFile : null;
-					result.noteContent =
-						activeFile && isMarkdownFile(activeFile) ? content : '';
+					result.noteContent = activeFile && isMarkdownFile(activeFile) ? content : '';
 				}
 				if (!isMarkdownFile(path) && s.codeFile === path) {
 					result.codeFile = activeFile && !isMarkdownFile(activeFile) ? activeFile : null;
-					result.codeContent =
-						activeFile && !isMarkdownFile(activeFile) ? content : '';
+					result.codeContent = activeFile && !isMarkdownFile(activeFile) ? content : '';
 					result.codeLanguage =
 						activeFile && !isMarkdownFile(activeFile) ? language : 'plaintext';
 				}
@@ -295,9 +288,7 @@ function createEditorStore() {
 			update((s) => {
 				const exists = s.openFiles.some((f) => f.path === path);
 				const openFiles: OpenFile[] = exists
-					? s.openFiles.map((f) =>
-							f.path === path ? { ...f, content } : f
-						)
+					? s.openFiles.map((f) => (f.path === path ? { ...f, content } : f))
 					: [...s.openFiles, { path, isDirty: false, language: 'markdown', content }];
 
 				return {

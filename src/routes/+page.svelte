@@ -155,13 +155,41 @@
 		console.log('[shortcut] create new note');
 	}
 
+	/**
+	 * Flush live editor content from codeStore/noteStore back into editorStore
+	 * so the tab cache captures unsaved edits before any tab switch or close.
+	 */
+	function flushLiveContent() {
+		if (!editorState.activeFile) return;
+		if (
+			!isMarkdownFile(editorState.activeFile) &&
+			codeStore.filePath === editorState.activeFile
+		) {
+			editorStore.updateContent(codeStore.content);
+			if (codeStore.isDirty !== editorState.isDirty) {
+				editorStore.setDirty(codeStore.isDirty);
+			}
+		}
+		if (
+			isMarkdownFile(editorState.activeFile) &&
+			noteStore.filePath === editorState.activeFile
+		) {
+			editorStore.updateContent(noteStore.content);
+			if (noteStore.isDirty !== editorState.isDirty) {
+				editorStore.setDirty(noteStore.isDirty);
+			}
+		}
+	}
+
 	/** Handle tab activation from the tab bar. */
 	function handleTabActivate(path: string) {
+		flushLiveContent();
 		editorStore.activateTab(path);
 	}
 
 	/** Handle tab close from the tab bar. */
 	function handleTabClose(path: string) {
+		flushLiveContent();
 		editorStore.closeFile(path);
 	}
 
@@ -205,10 +233,31 @@
 		shortcutRegistry.register('ctrl+\\', () => uiStore.toggleRightPanel(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
 		shortcutRegistry.register('ctrl+.', () => noteStore.toggleViewMode(), { global: true });
-		// Tab navigation shortcuts
-		shortcutRegistry.register('ctrl+tab', () => editorStore.nextTab(), { global: true });
-		shortcutRegistry.register('ctrl+shift+tab', () => editorStore.prevTab(), { global: true });
-		shortcutRegistry.register('ctrl+w', () => editorStore.closeActiveTab(), { global: true });
+		// Tab navigation shortcuts — flush live edits before switching
+		shortcutRegistry.register(
+			'ctrl+tab',
+			() => {
+				flushLiveContent();
+				editorStore.nextTab();
+			},
+			{ global: true }
+		);
+		shortcutRegistry.register(
+			'ctrl+shift+tab',
+			() => {
+				flushLiveContent();
+				editorStore.prevTab();
+			},
+			{ global: true }
+		);
+		shortcutRegistry.register(
+			'ctrl+w',
+			() => {
+				flushLiveContent();
+				editorStore.closeActiveTab();
+			},
+			{ global: true }
+		);
 
 		window.addEventListener('mousemove', handleActivity, { capture: true, passive: true });
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
@@ -301,6 +350,7 @@
 				filePath={editorState.noteFile}
 				content={editorState.noteContent}
 				pane="note"
+				activeTab={editorState.activeFile}
 				tabs={editorState.openFiles}
 				onactivatetab={handleTabActivate}
 				onclosetab={handleTabClose}
@@ -311,6 +361,7 @@
 				filePath={activePaneFile}
 				content={activePaneContent}
 				pane="auto"
+				activeTab={editorState.activeFile}
 				tabs={editorState.openFiles}
 				onactivatetab={handleTabActivate}
 				onclosetab={handleTabClose}

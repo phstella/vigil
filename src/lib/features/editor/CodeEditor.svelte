@@ -52,6 +52,8 @@
 	const MAX_AUTO_RETRIES = 2;
 	const BASE_RETRY_DELAY_MS = 500;
 	let retryCount = $state(0);
+	let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+	let destroyed = false;
 
 	// Track the last filePath we set up so we can detect file switches
 	let currentFilePath: string | null = null;
@@ -111,7 +113,7 @@
 	 * called again for retry after transient WebKitGTK failures (Task 3.5.3).
 	 */
 	async function initMonaco(): Promise<void> {
-		if (!containerEl) return;
+		if (!containerEl || destroyed) return;
 
 		isLoading = true;
 		loadError = null;
@@ -175,7 +177,10 @@
 					`[CodeEditor] Retrying Monaco load in ${delay}ms (attempt ${retryCount + 1})`
 				);
 				resetMonacoState();
-				setTimeout(() => void initMonaco(), delay);
+				retryTimeoutId = setTimeout(() => {
+					retryTimeoutId = null;
+					void initMonaco();
+				}, delay);
 				return;
 			}
 
@@ -200,6 +205,14 @@
 	});
 
 	onDestroy(() => {
+		destroyed = true;
+
+		// Cancel any pending retry timeout
+		if (retryTimeoutId !== null) {
+			clearTimeout(retryTimeoutId);
+			retryTimeoutId = null;
+		}
+
 		// Clean up git gutter controller
 		if (gutterController) {
 			gutterController.dispose();

@@ -9,6 +9,7 @@ Product identity:
 
 Scope rules:
 - MVP: Epics 0-3
+- Post-MVP stabilization: Epic 3.5
 - Post-MVP expansion: Epic 4
 - Explicitly out of scope: Vim mode, plugin store marketplace flow
 
@@ -69,6 +70,14 @@ Scope rules:
 - Task [3.10]: Wire file-watcher events to UI sync and cache invalidation.
 - Task [3.11]: Execute performance hardening against budget gates.
 - Task [3.12]: Build Linux/Windows artifacts and pass MVP smoke matrix.
+
+## Epic 3.5: Editor Workflow Stabilization & UX Cleanup
+
+- Task [3.5.1]: Remove default split layout/code split behavior; use one adaptive main editor pane.
+- Task [3.5.2]: Add multi-tab editing with optional side-by-side mode (user-invoked only).
+- Task [3.5.3]: Fix Linux Monaco crash path and add reproducible runtime validation evidence.
+- Task [3.5.4]: Remove notes/files metadata blocks from explorer (Notes card + Collections summary).
+- Task [3.5.5]: Render Mermaid charts in markdown notes (` ```mermaid ` code fences in preview mode).
 
 ## Epic 4: Expandability & Advanced Capabilities (No Vim, No Plugin Store)
 

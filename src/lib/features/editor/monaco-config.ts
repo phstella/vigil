@@ -215,6 +215,8 @@ export function detectMonacoLanguage(filePath: string): string {
 let monacoInstance: typeof Monaco | null = null;
 let monacoEnvironmentConfigured = false;
 let monacoWorkerConstructorsPromise: Promise<MonacoWorkerConstructors> | null = null;
+let activeMonacoWorkers = 0;
+let disableNewWorkers = false;
 
 type WorkerCtor = new () => Worker;
 interface MonacoWorkerConstructors {
@@ -225,8 +227,47 @@ interface MonacoWorkerConstructors {
 	TsWorker: WorkerCtor;
 }
 
+const MAX_ACTIVE_MONACO_WORKERS = 12;
+
+function isLinuxTauriRuntime(): boolean {
+	if (typeof globalThis === 'undefined' || typeof navigator === 'undefined') return false;
+	const ua = navigator.userAgent ?? '';
+	const isLinux = /\blinux\b/i.test(ua);
+	const runtime = globalThis as typeof globalThis & {
+		__TAURI_INTERNALS__?: unknown;
+		__TAURI__?: unknown;
+	};
+	const isTauri = Boolean(runtime.__TAURI_INTERNALS__ ?? runtime.__TAURI__);
+	return isLinux && isTauri;
+}
+
+/**
+ * Linux WebKitGTK in Tauri dev mode can intermittently fail worker network loads.
+ * Switch to inline workers to avoid URL fetch failures in that path.
+ */
+function shouldUseLinuxSafeMonacoWorkers(): boolean {
+	return import.meta.env.DEV && isLinuxTauriRuntime();
+}
+
 async function loadMonacoWorkerConstructors(): Promise<MonacoWorkerConstructors> {
 	if (monacoWorkerConstructorsPromise) {
+		return monacoWorkerConstructorsPromise;
+	}
+
+	if (shouldUseLinuxSafeMonacoWorkers()) {
+		monacoWorkerConstructorsPromise = Promise.all([
+			import('monaco-editor/esm/vs/editor/editor.worker?worker&inline'),
+			import('monaco-editor/esm/vs/language/json/json.worker?worker&inline'),
+			import('monaco-editor/esm/vs/language/css/css.worker?worker&inline'),
+			import('monaco-editor/esm/vs/language/html/html.worker?worker&inline'),
+			import('monaco-editor/esm/vs/language/typescript/ts.worker?worker&inline')
+		]).then(([editor, json, css, html, ts]) => ({
+			EditorWorker: editor.default,
+			JsonWorker: json.default,
+			CssWorker: css.default,
+			HtmlWorker: html.default,
+			TsWorker: ts.default
+		}));
 		return monacoWorkerConstructorsPromise;
 	}
 
@@ -251,6 +292,7 @@ async function configureMonacoEnvironment() {
 	if (monacoEnvironmentConfigured || typeof window === 'undefined') return;
 	monacoEnvironmentConfigured = true;
 	const workers = await loadMonacoWorkerConstructors();
+	const linuxSafeMode = shouldUseLinuxSafeMonacoWorkers();
 
 	const target = globalThis as typeof globalThis & {
 		MonacoEnvironment?: {
@@ -258,24 +300,64 @@ async function configureMonacoEnvironment() {
 		};
 	};
 
+	if (linuxSafeMode) {
+		console.warn('[monaco] Linux safe worker mode enabled (inline typed workers)');
+	}
+
+	function createWorker(label: string, ctor: WorkerCtor): Worker {
+		if (disableNewWorkers) {
+			throw new Error('[monaco] worker creation disabled after prior failure');
+		}
+		if (activeMonacoWorkers >= MAX_ACTIVE_MONACO_WORKERS) {
+			disableNewWorkers = true;
+			throw new Error(
+				`[monaco] worker cap exceeded (${MAX_ACTIVE_MONACO_WORKERS}) while creating ${label}`
+			);
+		}
+
+		try {
+			const worker = new ctor();
+			activeMonacoWorkers += 1;
+
+			let released = false;
+			const release = () => {
+				if (released) return;
+				released = true;
+				activeMonacoWorkers = Math.max(0, activeMonacoWorkers - 1);
+			};
+
+			const terminate = worker.terminate.bind(worker);
+			worker.terminate = () => {
+				release();
+				terminate();
+			};
+
+			return worker;
+		} catch (err) {
+			disableNewWorkers = true;
+			console.error(`[monaco] failed to construct worker (${label}):`, err);
+			throw err;
+		}
+	}
+
 	target.MonacoEnvironment = {
 		getWorker(_moduleId: string, label: string): Worker {
 			switch (label) {
 				case 'json':
-					return new workers.JsonWorker();
+					return createWorker(label, workers.JsonWorker);
 				case 'css':
 				case 'scss':
 				case 'less':
-					return new workers.CssWorker();
+					return createWorker(label, workers.CssWorker);
 				case 'html':
 				case 'handlebars':
 				case 'razor':
-					return new workers.HtmlWorker();
+					return createWorker(label, workers.HtmlWorker);
 				case 'typescript':
 				case 'javascript':
-					return new workers.TsWorker();
+					return createWorker(label, workers.TsWorker);
 				default:
-					return new workers.EditorWorker();
+					return createWorker(label, workers.EditorWorker);
 			}
 		}
 	};

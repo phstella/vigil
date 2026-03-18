@@ -50,6 +50,10 @@
 	// When filePath changes, switch notes only after open() succeeds.
 	$effect(() => {
 		if (!filePath) return;
+		if (noteStore.filePath === filePath) {
+			loadedPath = filePath;
+			return;
+		}
 		if (blockedPath !== null && filePath !== blockedPath) {
 			blockedPath = null;
 		}

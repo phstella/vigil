@@ -13,7 +13,6 @@ import { listDir, readFile } from '$lib/ipc/files';
 import { editorStore } from '$lib/stores/editor';
 import { isMarkdownFile } from '$lib/utils/file-routing';
 import { detectLanguage } from '$lib/features/editor/code-store.svelte';
-import { uiStore } from '$lib/stores/ui';
 import { SvelteSet } from 'svelte/reactivity';
 
 /** A tree node extends DirEntry with optional children for recursive rendering. */
@@ -268,11 +267,6 @@ function createExplorerStore() {
 				}
 				const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
 				editorStore.openFile(path, response.content, language);
-
-				// Show the right panel when opening a code file
-				if (!isMarkdownFile(path)) {
-					uiStore.openRightPanel();
-				}
 			} catch (err) {
 				// Ignore stale failures for no-longer-selected files.
 				if (requestId !== fileSelectionRequestId || selectedFile !== path) {

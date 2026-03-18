@@ -56,7 +56,10 @@
 
 	// Sync incoming props into the local code store.
 	$effect(() => {
-		codeStore.load(filePath, content);
+		// Preserve unsaved buffer when remounting the same file in single-pane mode.
+		if (codeStore.filePath !== filePath) {
+			codeStore.load(filePath, content);
+		}
 	});
 
 	/**
@@ -85,7 +88,9 @@
 
 		// Content can arrive asynchronously after the file path changes.
 		// Keep Monaco in sync whenever upstream props publish new content.
-		if (didSwitchFile || ct !== lastAppliedPropContent) {
+		const shouldApplyPropContent =
+			didSwitchFile || (ct !== lastAppliedPropContent && codeStore.filePath !== fp);
+		if (shouldApplyPropContent) {
 			if (model.getValue() !== ct) {
 				// Avoid triggering our own onDidChangeModelContent handler with redundant writes.
 				model.setValue(ct);
@@ -105,10 +110,11 @@
 
 			const language = detectMonacoLanguage(filePath);
 			const options = getDefaultEditorOptions();
+			const initialContent = codeStore.filePath === filePath ? codeStore.content : content;
 
 			editor = monacoRef.editor.create(containerEl, {
 				...options,
-				value: content,
+				value: initialContent,
 				language
 			});
 
@@ -116,7 +122,7 @@
 			monacoRef.editor.setTheme(VIGIL_THEME_NAME);
 
 			currentFilePath = filePath;
-			lastAppliedPropContent = content;
+			lastAppliedPropContent = initialContent;
 
 			// Initialize git gutter controller
 			gutterController = new GutterController(editor);

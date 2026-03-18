@@ -58,17 +58,17 @@ function createUiStore() {
 			update((s) => ({ ...s, omnibarMode: mode }));
 		},
 
-		/** Toggle the right (code) panel. */
+		/** Toggle side-by-side mode (note center + code right). */
 		toggleRightPanel() {
 			update((s) => ({ ...s, rightPanelOpen: !s.rightPanelOpen }));
 		},
 
-		/** Open the right (code) panel. */
+		/** Enable side-by-side mode. */
 		openRightPanel() {
 			update((s) => ({ ...s, rightPanelOpen: true }));
 		},
 
-		/** Close the right (code) panel. */
+		/** Disable side-by-side mode. */
 		closeRightPanel() {
 			update((s) => ({ ...s, rightPanelOpen: false }));
 		}

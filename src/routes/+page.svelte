@@ -155,8 +155,21 @@
 		console.log('[shortcut] create new note');
 	}
 
-	// Derive whether the right panel should show based on whether a code file is open
-	let showRightPanel = $derived(uiState.rightPanelOpen || editorState.codeFile !== null);
+	// Side-by-side is an explicit user mode. Default editing uses a single adaptive pane.
+	let sideBySideMode = $derived(uiState.rightPanelOpen);
+
+	// In single-pane mode, route the active file to its matching editor.
+	let activePaneFile = $derived(editorState.activeFile);
+	let activePaneContent = $derived.by(() => {
+		const activePath = editorState.activeFile;
+		if (!activePath) return '';
+		if (isMarkdownFile(activePath)) {
+			return editorState.noteFile === activePath
+				? editorState.noteContent
+				: editorState.content;
+		}
+		return editorState.codeFile === activePath ? editorState.codeContent : editorState.content;
+	});
 
 	onMount(() => {
 		cleanupEditorSubscription = editorStore.subscribe((s) => {
@@ -179,6 +192,7 @@
 		});
 		shortcutRegistry.register('ctrl+s', saveCurrentFile, { global: true });
 		shortcutRegistry.register('ctrl+b', () => uiStore.toggleSidebar(), { global: true });
+		shortcutRegistry.register('ctrl+\\', () => uiStore.toggleRightPanel(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
 		shortcutRegistry.register('ctrl+.', () => noteStore.toggleViewMode(), { global: true });
 
@@ -211,6 +225,7 @@
 		shortcutRegistry.unregister('ctrl+shift+f');
 		shortcutRegistry.unregister('ctrl+s');
 		shortcutRegistry.unregister('ctrl+b');
+		shortcutRegistry.unregister('ctrl+\\');
 		shortcutRegistry.unregister('ctrl+n');
 		shortcutRegistry.unregister('ctrl+.');
 
@@ -238,7 +253,7 @@
 		<TitleBar />
 	{/snippet}
 
-	<WorkspaceGrid>
+	<WorkspaceGrid splitEnabled={sideBySideMode}>
 		{#snippet activityRail()}
 			<PrimaryRail
 				activeSection={uiState.sidebarOpen ? (uiState.sidebarSection as Section) : null}
@@ -256,21 +271,24 @@
 		{/snippet}
 
 		{#snippet rightPanel()}
-			{#if showRightPanel}
-				<EditorRouter
-					filePath={editorState.codeFile}
-					content={editorState.codeContent}
-					pane="code"
-				/>
-			{/if}
+			<EditorRouter
+				filePath={editorState.codeFile}
+				content={editorState.codeContent}
+				pane="code"
+			/>
 		{/snippet}
 
-		<!-- Center pane: note editor for .md files -->
-		<EditorRouter
-			filePath={editorState.noteFile}
-			content={editorState.noteContent}
-			pane="note"
-		/>
+		{#if sideBySideMode}
+			<!-- Split view: center pane is always the note editor surface. -->
+			<EditorRouter
+				filePath={editorState.noteFile}
+				content={editorState.noteContent}
+				pane="note"
+			/>
+		{:else}
+			<!-- Default mode: one pane that switches between note/code by active file type. -->
+			<EditorRouter filePath={activePaneFile} content={activePaneContent} pane="auto" />
+		{/if}
 	</WorkspaceGrid>
 
 	{#snippet statusbar()}

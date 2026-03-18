@@ -140,6 +140,6 @@ export interface UiState {
 	omnibarOpen: boolean;
 	/** Active omnibar search mode. */
 	omnibarMode: OmnibarMode;
-	/** Whether the right (code) panel is visible. */
+	/** Whether side-by-side mode is enabled (note center + code right). */
 	rightPanelOpen: boolean;
 }

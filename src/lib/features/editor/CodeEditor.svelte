@@ -24,7 +24,8 @@
 		getDefaultEditorOptions,
 		detectMonacoLanguage,
 		VIGIL_THEME_NAME,
-		isMonacoLoaded
+		isMonacoLoaded,
+		resetMonacoState
 	} from './monaco-config';
 	import { GutterController } from '$lib/features/git/gutter';
 	import { onGitHunks } from '$lib/ipc/events';
@@ -45,6 +46,12 @@
 	let monacoRef: typeof Monaco | null = null;
 	let isLoading = $state(true);
 	let loadError: string | null = $state(null);
+
+	// Retry state for transient WebKitGTK failures (Task 3.5.3).
+	// Auto-retries with exponential backoff before surfacing the error to the user.
+	const MAX_AUTO_RETRIES = 2;
+	const BASE_RETRY_DELAY_MS = 500;
+	let retryCount = $state(0);
 
 	// Track the last filePath we set up so we can detect file switches
 	let currentFilePath: string | null = null;
@@ -99,8 +106,15 @@
 		}
 	});
 
-	onMount(async () => {
+	/**
+	 * Attempt to initialize Monaco. Separated from onMount so it can be
+	 * called again for retry after transient WebKitGTK failures (Task 3.5.3).
+	 */
+	async function initMonaco(): Promise<void> {
 		if (!containerEl) return;
+
+		isLoading = true;
+		loadError = null;
 
 		// First Monaco boot includes dynamic import + worker spin-up, so use a wider cold-start budget.
 		const mountTimer = perfTimer('editor-mount', isMonacoLoaded() ? 120 : 500);
@@ -144,13 +158,45 @@
 			});
 
 			isLoading = false;
+			retryCount = 0;
 			mountTimer.stop();
 		} catch (err) {
-			console.error('[CodeEditor] Failed to load Monaco:', err);
+			mountTimer.stop();
+			console.error(
+				`[CodeEditor] Failed to load Monaco (attempt ${retryCount + 1}/${MAX_AUTO_RETRIES + 1}):`,
+				err
+			);
+
+			// Auto-retry with exponential backoff for transient WebKitGTK failures.
+			if (retryCount < MAX_AUTO_RETRIES) {
+				retryCount += 1;
+				const delay = BASE_RETRY_DELAY_MS * Math.pow(2, retryCount - 1);
+				console.warn(
+					`[CodeEditor] Retrying Monaco load in ${delay}ms (attempt ${retryCount + 1})`
+				);
+				resetMonacoState();
+				setTimeout(() => void initMonaco(), delay);
+				return;
+			}
+
+			// All auto-retries exhausted -- surface error to user with manual retry option.
 			loadError = err instanceof Error ? err.message : 'Failed to load editor';
 			isLoading = false;
-			mountTimer.stop();
 		}
+	}
+
+	/**
+	 * Manual retry triggered by user clicking the retry button.
+	 * Resets all Monaco state and starts a fresh load attempt.
+	 */
+	function handleManualRetry(): void {
+		retryCount = 0;
+		resetMonacoState();
+		void initMonaco();
+	}
+
+	onMount(() => {
+		void initMonaco();
 	});
 
 	onDestroy(() => {
@@ -212,6 +258,13 @@
 				<div class="text-center">
 					<span class="text-sm text-error">Editor failed to load</span>
 					<p class="mt-1 text-xs text-text-muted">{loadError}</p>
+					<button
+						type="button"
+						class="mt-3 rounded bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent/80"
+						onclick={handleManualRetry}
+					>
+						Retry
+					</button>
 				</div>
 			</div>
 		{/if}

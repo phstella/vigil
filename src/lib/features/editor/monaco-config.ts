@@ -4,6 +4,15 @@
  * Provides a performance-focused default configuration, a custom dark theme
  * aligned with Vigil design tokens, and helpers for language detection.
  *
+ * Linux stability (Task 3.5.3):
+ * WebKitGTK (used by Tauri on Linux) intermittently fails to load web worker
+ * blob/URL resources, triggering `internallyFailedLoadTimerFired` cascades
+ * that crash the editor. Mitigations:
+ * - Always use inline workers on Linux Tauri (dev and production builds).
+ * - Worker construction failures are non-fatal; transient errors do not
+ *   permanently disable new worker creation.
+ * - loadMonaco() state can be reset to allow retry from the component layer.
+ *
  * Performance notes (per docs/specs/editor-performance-budget.md):
  * - Keystroke-to-paint latency: <= 16 ms p95
  * - Scroll FPS: >= 60 FPS target, >= 45 FPS floor
@@ -216,7 +225,7 @@ let monacoInstance: typeof Monaco | null = null;
 let monacoEnvironmentConfigured = false;
 let monacoWorkerConstructorsPromise: Promise<MonacoWorkerConstructors> | null = null;
 let activeMonacoWorkers = 0;
-let disableNewWorkers = false;
+let consecutiveWorkerFailures = 0;
 
 type WorkerCtor = new () => Worker;
 interface MonacoWorkerConstructors {
@@ -228,6 +237,12 @@ interface MonacoWorkerConstructors {
 }
 
 const MAX_ACTIVE_MONACO_WORKERS = 12;
+/**
+ * After this many consecutive worker construction failures, new worker
+ * creation is disabled until resetMonacoState() is called (which the
+ * CodeEditor retry logic triggers).
+ */
+const MAX_CONSECUTIVE_WORKER_FAILURES = 3;
 
 function isLinuxTauriRuntime(): boolean {
 	if (typeof globalThis === 'undefined' || typeof navigator === 'undefined') return false;
@@ -242,11 +257,19 @@ function isLinuxTauriRuntime(): boolean {
 }
 
 /**
- * Linux WebKitGTK in Tauri dev mode can intermittently fail worker network loads.
- * Switch to inline workers to avoid URL fetch failures in that path.
+ * Linux WebKitGTK intermittently fails worker network/blob loads in Tauri,
+ * triggering `WebLoaderStrategy::internallyFailedLoadTimerFired` cascades.
+ * This affects both dev and production builds because the root cause is a
+ * WebKitGTK resource-loading race, not a Vite dev-server issue.
+ *
+ * Always use inline workers on Linux Tauri to side-step URL fetch failures.
+ *
+ * Trade-off: inline workers embed the worker JS as base64 data-URIs in the
+ * main bundle, increasing initial payload by ~200-400 KB on Linux. This is
+ * acceptable given the alternative is a hard crash.
  */
 function shouldUseLinuxSafeMonacoWorkers(): boolean {
-	return import.meta.env.DEV && isLinuxTauriRuntime();
+	return isLinuxTauriRuntime();
 }
 
 async function loadMonacoWorkerConstructors(): Promise<MonacoWorkerConstructors> {
@@ -305,11 +328,12 @@ async function configureMonacoEnvironment() {
 	}
 
 	function createWorker(label: string, ctor: WorkerCtor): Worker {
-		if (disableNewWorkers) {
-			throw new Error('[monaco] worker creation disabled after prior failure');
+		if (consecutiveWorkerFailures >= MAX_CONSECUTIVE_WORKER_FAILURES) {
+			throw new Error(
+				`[monaco] worker creation suspended after ${consecutiveWorkerFailures} consecutive failures -- call resetMonacoState() to retry`
+			);
 		}
 		if (activeMonacoWorkers >= MAX_ACTIVE_MONACO_WORKERS) {
-			disableNewWorkers = true;
 			throw new Error(
 				`[monaco] worker cap exceeded (${MAX_ACTIVE_MONACO_WORKERS}) while creating ${label}`
 			);
@@ -318,6 +342,8 @@ async function configureMonacoEnvironment() {
 		try {
 			const worker = new ctor();
 			activeMonacoWorkers += 1;
+			// Successful creation resets the consecutive failure counter.
+			consecutiveWorkerFailures = 0;
 
 			let released = false;
 			const release = () => {
@@ -332,10 +358,20 @@ async function configureMonacoEnvironment() {
 				terminate();
 			};
 
+			// Listen for async worker errors (e.g. WebKitGTK load failures
+			// that surface after construction). Log but don't cascade -- the
+			// worker may still be partially functional.
+			worker.addEventListener('error', (evt) => {
+				console.warn(`[monaco] async worker error (${label}):`, evt.message);
+			});
+
 			return worker;
 		} catch (err) {
-			disableNewWorkers = true;
-			console.error(`[monaco] failed to construct worker (${label}):`, err);
+			consecutiveWorkerFailures += 1;
+			console.error(
+				`[monaco] failed to construct worker (${label}), consecutive failures: ${consecutiveWorkerFailures}:`,
+				err
+			);
 			throw err;
 		}
 	}
@@ -368,11 +404,31 @@ export function isMonacoLoaded(): boolean {
 }
 
 /**
+ * Reset Monaco loader state so a fresh load attempt can be made.
+ *
+ * Called by CodeEditor's retry logic after a transient WebKitGTK failure.
+ * Clears the cached instance, environment flag, worker constructor cache,
+ * and failure counters so the next loadMonaco() call starts clean.
+ */
+export function resetMonacoState(): void {
+	monacoInstance = null;
+	monacoEnvironmentConfigured = false;
+	monacoWorkerConstructorsPromise = null;
+	consecutiveWorkerFailures = 0;
+	// Note: activeMonacoWorkers is intentionally NOT reset -- existing workers
+	// may still be alive and counted against the cap.
+	console.warn('[monaco] loader state reset for retry');
+}
+
+/**
  * Lazily load the Monaco editor module.
  *
  * The dynamic import ensures Monaco's ~2 MB of JS is not included in the
  * initial bundle, meeting the performance budget requirement of lazy-loading
  * heavy editor modules.
+ *
+ * On Linux Tauri, inline workers are used unconditionally to avoid
+ * WebKitGTK blob/URL load failures (Task 3.5.3).
  */
 export async function loadMonaco(): Promise<typeof Monaco> {
 	if (monacoInstance) return monacoInstance;

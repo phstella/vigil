@@ -11,7 +11,8 @@ import type {
 	IndexUpdatedPayload,
 	IndexReadyPayload,
 	GitHunksPayload,
-	StatusUpdatedPayload
+	StatusUpdatedPayload,
+	FsRenamedPayload
 } from '$lib/types/ipc';
 
 /** Event channel names matching Rust `events/*.rs` constants. */
@@ -19,11 +20,14 @@ export const EVENTS = {
 	INDEX_UPDATED: 'vigil://index-updated',
 	INDEX_READY: 'vigil://index-ready',
 	GIT_HUNKS: 'vigil://git-hunks',
-	STATUS_UPDATED: 'vigil://status-updated'
+	STATUS_UPDATED: 'vigil://status-updated',
+	FS_RENAMED: 'vigil://fs-renamed'
 } as const;
 
 /** Subscribe to file index change notifications. */
-export function onIndexUpdated(handler: (payload: IndexUpdatedPayload) => void): Promise<UnlistenFn> {
+export function onIndexUpdated(
+	handler: (payload: IndexUpdatedPayload) => void
+): Promise<UnlistenFn> {
 	return listenEvent<IndexUpdatedPayload>(EVENTS.INDEX_UPDATED, handler);
 }
 
@@ -42,4 +46,9 @@ export function onStatusUpdated(
 	handler: (payload: StatusUpdatedPayload) => void
 ): Promise<UnlistenFn> {
 	return listenEvent<StatusUpdatedPayload>(EVENTS.STATUS_UPDATED, handler);
+}
+
+/** Subscribe to file rename/move notifications. */
+export function onFsRenamed(handler: (payload: FsRenamedPayload) => void): Promise<UnlistenFn> {
+	return listenEvent<FsRenamedPayload>(EVENTS.FS_RENAMED, handler);
 }

@@ -43,6 +43,9 @@ export type {
 	GitStatusEntry as IpcGitStatusEntry,
 	BacklinkRecord,
 	BacklinksResponse,
+	NoteNode,
+	LinkEdge,
+	NoteGraphResponse,
 	SyncState as IpcSyncState,
 	WorkspaceStatus,
 	EventMeta,
@@ -51,5 +54,6 @@ export type {
 	IndexUpdatedPayload,
 	IndexReadyPayload,
 	GitHunksPayload,
-	StatusUpdatedPayload
+	StatusUpdatedPayload,
+	FsRenamedPayload
 } from './ipc';

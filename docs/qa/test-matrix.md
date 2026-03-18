@@ -23,6 +23,8 @@
 | QA-009 | Status bar live values | Required | Required | Branch/sync/count/version values display correctly |
 | QA-010 | Keyboard shortcuts | Required | Required | Ctrl+P/Ctrl+S/Ctrl+B/Ctrl+N behave consistently |
 | QA-011 | Packaging | Required | Required | Installer/binary launches and runs smoke suite |
+| QA-012 | Linux Monaco load stability (dev mode) | Required | N/A | `npx tauri dev` + open code file does not reset/crash, no repeated `WebLoaderStrategy::internallyFailedLoadTimerFired` loop, and no repeated Monaco `Missing requestHandler` worker errors |
+| QA-013 | Markdown Mermaid render | Required | Required | ` ```mermaid ` fenced blocks render in preview mode; invalid diagrams show fallback without crashing |
 
 ## Expansion Matrix (Epic 4)
 

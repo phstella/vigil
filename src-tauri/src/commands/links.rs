@@ -3,7 +3,7 @@
 use tauri::State;
 
 use crate::models::error::VigilError;
-use crate::models::links::BacklinksResponse;
+use crate::models::links::{BacklinksResponse, NoteGraphResponse};
 use crate::state::AppState;
 
 /// Shared `get_backlinks` command logic, split for direct testing.
@@ -30,4 +30,13 @@ pub async fn get_backlinks(
     state: State<'_, AppState>,
 ) -> Result<BacklinksResponse, VigilError> {
     get_backlinks_for_state(&path, &state)
+}
+
+/// Get the full note link graph for visualization.
+#[tauri::command]
+pub async fn get_note_graph(state: State<'_, AppState>) -> Result<NoteGraphResponse, VigilError> {
+    state.workspace().ok_or(VigilError::WorkspaceNotOpen)?;
+    let index = state.index().ok_or(VigilError::IndexUnavailable)?;
+    let graph = state.link_graph().ok_or(VigilError::IndexUnavailable)?;
+    Ok(graph.get_graph(&index))
 }

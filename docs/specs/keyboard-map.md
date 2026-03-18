@@ -8,7 +8,7 @@ Define a deterministic, keyboard-centric interaction model.
 - `Ctrl+N`: create new note
 - `Ctrl+S`: save active buffer
 - `Ctrl+B`: toggle explorer sidebar
-- `Ctrl+\\`: toggle split orientation (future)
+- `Ctrl+\\`: toggle side-by-side layout
 - `Ctrl+Shift+P`: command-only omnibar mode
 
 ## Navigation

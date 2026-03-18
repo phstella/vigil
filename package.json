@@ -42,6 +42,7 @@
 	},
 	"type": "module",
 	"dependencies": {
-		"@tauri-apps/api": "^2.10.1"
+		"@tauri-apps/api": "^2.10.1",
+		"monaco-editor": "^0.55.1"
 	}
 }

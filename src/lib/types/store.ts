@@ -60,6 +60,18 @@ export interface EditorState {
 	content: string;
 	/** Detected language / syntax mode of the active file. */
 	language: string;
+	/** Workspace-relative path of the active note (.md) in center pane, or null. */
+	noteFile: string | null;
+	/** Content of the active note file. */
+	noteContent: string;
+	/** Workspace-relative path of the active code file in right pane, or null. */
+	codeFile: string | null;
+	/** Content of the active code file. */
+	codeContent: string;
+	/** Detected language of the active code file. */
+	codeLanguage: string;
+	/** Paths of open files that have been changed on disk (conflict detection). */
+	conflictFiles: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +128,9 @@ export interface SettingsState {
 /** Sidebar panel identifiers. */
 export type SidebarSection = 'explorer' | 'search' | 'graph' | 'tags';
 
+/** Omnibar search mode. */
+export type OmnibarMode = 'file' | 'content';
+
 export interface UiState {
 	/** Whether the sidebar is visible. */
 	sidebarOpen: boolean;
@@ -123,6 +138,8 @@ export interface UiState {
 	sidebarSection: SidebarSection;
 	/** Whether the omnibar overlay is open. */
 	omnibarOpen: boolean;
-	/** Whether the right (code) panel is visible. */
+	/** Active omnibar search mode. */
+	omnibarMode: OmnibarMode;
+	/** Whether side-by-side mode is enabled (note center + code right). */
 	rightPanelOpen: boolean;
 }

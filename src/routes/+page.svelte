@@ -1,16 +1,27 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { AppShell, Sidebar, TitleBar, WorkspaceGrid } from '$lib/components/layout';
-	import { PrimaryRail } from '$lib/components/chrome';
-	import { EditorRouter } from '$lib/features/editor';
-	import { Omnibar } from '$lib/features/omnibar';
-	import { StatusBar } from '$lib/features/status';
+	import AppShell from '$lib/components/layout/AppShell.svelte';
+	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import TitleBar from '$lib/components/layout/TitleBar.svelte';
+	import WorkspaceGrid from '$lib/components/layout/WorkspaceGrid.svelte';
+	import PrimaryRail from '$lib/components/chrome/PrimaryRail.svelte';
+	import EditorRouter from '$lib/features/editor/EditorRouter.svelte';
+	import Omnibar from '$lib/features/omnibar/Omnibar.svelte';
+	import StatusBar from '$lib/features/status/StatusBar.svelte';
+	import { statusStore } from '$lib/features/status/status-store';
+	import {
+		initFileWatcher,
+		teardownFileWatcher,
+		openAndLoadWorkspace
+	} from '$lib/features/workspace';
 	import { editorStore } from '$lib/stores/editor';
 	import { settingsStore } from '$lib/stores/settings';
 	import { uiStore } from '$lib/stores/ui';
-	import { shortcutRegistry } from '$lib/utils';
-	import { noteStore } from '$lib/features/editor/note-store';
-	import { codeStore } from '$lib/features/editor/code-store';
+	import { shortcutRegistry } from '$lib/utils/shortcuts';
+	import { noteStore } from '$lib/features/editor/note-store.svelte';
+	import { codeStore, detectLanguage } from '$lib/features/editor/code-store.svelte';
+	import { readFile, writeFile } from '$lib/ipc/files';
+	import { isMarkdownFile } from '$lib/utils/file-routing';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
 	import type { EditorState, SettingsState, UiState } from '$lib/types/store';
 
@@ -22,14 +33,21 @@
 		openFiles: [],
 		isDirty: false,
 		content: '',
-		language: 'plaintext'
+		language: 'plaintext',
+		noteFile: null,
+		noteContent: '',
+		codeFile: null,
+		codeContent: '',
+		codeLanguage: 'plaintext',
+		conflictFiles: new Set<string>()
 	});
 
-	// Subscribe to the UI store to track omnibar visibility.
+	// Subscribe to the UI store to track omnibar visibility and mode.
 	let uiState: UiState = $state({
 		sidebarOpen: true,
 		sidebarSection: 'explorer',
 		omnibarOpen: false,
+		omnibarMode: 'file',
 		rightPanelOpen: false
 	});
 
@@ -92,29 +110,43 @@
 	}
 
 	function handleOmnibarClose() {
-		if (uiState.omnibarOpen) {
-			uiStore.toggleOmnibar();
+		uiStore.closeOmnibar();
+	}
+
+	async function handleOmnibarSelect(path: string, lineNumber?: number) {
+		try {
+			const response = await readFile(path);
+			const language = isMarkdownFile(path) ? 'markdown' : detectLanguage(path);
+			editorStore.openFileRouted(path, response.content, language);
+			if (lineNumber !== undefined) {
+				// Line number is available for content search results.
+				// Editors will use this to jump to the matching line once go-to-line is wired.
+				console.debug('[omnibar] open at line:', lineNumber);
+			}
+		} catch (err) {
+			console.error('[omnibar] failed to open file:', path, err);
 		}
 	}
 
-	function handleOmnibarSelect(path: string) {
-		// TODO: Wire to editor open flow once IPC is available.
-		console.log('[omnibar] selected:', path);
-	}
-
-	/** Placeholder save action -- logs and clears dirty state. */
-	function saveCurrentFile() {
+	/** Save the active file via IPC (notes use write_file; code is placeholder). */
+	async function saveCurrentFile() {
 		if (noteStore.isDirty) {
-			console.log('[shortcut] save note:', noteStore.filePath);
-			noteStore.markClean();
+			const success = await noteStore.save();
+			if (!success) {
+				console.error('[shortcut] note save failed:', noteStore.lastError);
+			}
 			return;
 		}
-		if (codeStore.isDirty) {
-			console.log('[shortcut] save code:', codeStore.filePath);
-			codeStore.markClean();
+		if (codeStore.isDirty && codeStore.filePath) {
+			try {
+				await writeFile(codeStore.filePath, codeStore.content);
+				codeStore.markClean();
+			} catch (err: unknown) {
+				const message = err instanceof Error ? err.message : String(err);
+				console.error('[shortcut] code save failed:', message);
+			}
 			return;
 		}
-		console.log('[shortcut] save: nothing to save');
 	}
 
 	/** Placeholder new note action. */
@@ -122,6 +154,22 @@
 		// TODO: Wire to create_note IPC command once available.
 		console.log('[shortcut] create new note');
 	}
+
+	// Side-by-side is an explicit user mode. Default editing uses a single adaptive pane.
+	let sideBySideMode = $derived(uiState.rightPanelOpen);
+
+	// In single-pane mode, route the active file to its matching editor.
+	let activePaneFile = $derived(editorState.activeFile);
+	let activePaneContent = $derived.by(() => {
+		const activePath = editorState.activeFile;
+		if (!activePath) return '';
+		if (isMarkdownFile(activePath)) {
+			return editorState.noteFile === activePath
+				? editorState.noteContent
+				: editorState.content;
+		}
+		return editorState.codeFile === activePath ? editorState.codeContent : editorState.content;
+	});
 
 	onMount(() => {
 		cleanupEditorSubscription = editorStore.subscribe((s) => {
@@ -139,26 +187,55 @@
 		});
 
 		shortcutRegistry.register('ctrl+p', () => uiStore.toggleOmnibar(), { global: true });
+		shortcutRegistry.register('ctrl+shift+f', () => uiStore.openOmnibar('content'), {
+			global: true
+		});
 		shortcutRegistry.register('ctrl+s', saveCurrentFile, { global: true });
 		shortcutRegistry.register('ctrl+b', () => uiStore.toggleSidebar(), { global: true });
+		shortcutRegistry.register('ctrl+\\', () => uiStore.toggleRightPanel(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
+		shortcutRegistry.register('ctrl+.', () => noteStore.toggleViewMode(), { global: true });
 
 		window.addEventListener('mousemove', handleActivity, { capture: true, passive: true });
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
 		window.addEventListener('keydown', handleActivity, { capture: true });
 		scheduleSidebarAutoHide();
+
+		// Wire file-watcher events from Rust backend to UI stores
+		initFileWatcher().catch((err) => {
+			console.error('[vigil] failed to initialize file watcher listeners:', err);
+		});
+
+		// Attempt to open a workspace on startup.
+		// In production, the path comes from CLI args, recent workspaces, or a dialog.
+		// The app gracefully shows an empty explorer if no workspace is opened.
+		openAndLoadWorkspace('.')
+			.then(() => {
+				// Re-fetch status now that workspace is open and backend is ready
+				return statusStore.initialize();
+			})
+			.catch((err) => {
+				// Expected to fail in dev/browser mode; workspace will be opened via user action
+				console.debug('[vigil] initial workspace open skipped or failed:', err);
+			});
 	});
 
 	onDestroy(() => {
 		shortcutRegistry.unregister('ctrl+p');
+		shortcutRegistry.unregister('ctrl+shift+f');
 		shortcutRegistry.unregister('ctrl+s');
 		shortcutRegistry.unregister('ctrl+b');
+		shortcutRegistry.unregister('ctrl+\\');
 		shortcutRegistry.unregister('ctrl+n');
+		shortcutRegistry.unregister('ctrl+.');
 
 		window.removeEventListener('mousemove', handleActivity, { capture: true });
 		window.removeEventListener('mousedown', handleActivity, { capture: true });
 		window.removeEventListener('keydown', handleActivity, { capture: true });
 		clearSidebarAutoHideTimer();
+
+		// Tear down file-watcher event subscriptions
+		teardownFileWatcher();
 
 		cleanupEditorSubscription?.();
 		cleanupUiSubscription?.();
@@ -176,7 +253,7 @@
 		<TitleBar />
 	{/snippet}
 
-		<WorkspaceGrid>
+	<WorkspaceGrid splitEnabled={sideBySideMode}>
 		{#snippet activityRail()}
 			<PrimaryRail
 				activeSection={uiState.sidebarOpen ? (uiState.sidebarSection as Section) : null}
@@ -195,19 +272,23 @@
 
 		{#snippet rightPanel()}
 			<EditorRouter
-				filePath={editorState.activeFile && !editorState.activeFile.endsWith('.md')
-					? editorState.activeFile
-					: null}
-				content={editorState.activeFile && !editorState.activeFile.endsWith('.md')
-					? editorState.content
-					: ''}
+				filePath={editorState.codeFile}
+				content={editorState.codeContent}
+				pane="code"
 			/>
 		{/snippet}
 
-		<EditorRouter
-			filePath={editorState.activeFile?.endsWith('.md') ? editorState.activeFile : null}
-			content={editorState.activeFile?.endsWith('.md') ? editorState.content : ''}
-		/>
+		{#if sideBySideMode}
+			<!-- Split view: center pane is always the note editor surface. -->
+			<EditorRouter
+				filePath={editorState.noteFile}
+				content={editorState.noteContent}
+				pane="note"
+			/>
+		{:else}
+			<!-- Default mode: one pane that switches between note/code by active file type. -->
+			<EditorRouter filePath={activePaneFile} content={activePaneContent} pane="auto" />
+		{/if}
 	</WorkspaceGrid>
 
 	{#snippet statusbar()}
@@ -225,5 +306,9 @@
 
 <!-- Omnibar overlay, rendered outside the AppShell so it floats above everything -->
 {#if uiState.omnibarOpen}
-	<Omnibar onclose={handleOmnibarClose} onselect={handleOmnibarSelect} />
+	<Omnibar
+		onclose={handleOmnibarClose}
+		onselect={handleOmnibarSelect}
+		initialMode={uiState.omnibarMode}
+	/>
 {/if}

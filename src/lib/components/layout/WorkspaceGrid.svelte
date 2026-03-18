@@ -12,6 +12,7 @@
 		sidebar,
 		children,
 		rightPanel,
+		splitEnabled = true,
 		splitDirection = 'horizontal',
 		initialSplit = 50
 	}: {
@@ -19,6 +20,7 @@
 		sidebar?: Snippet;
 		children: Snippet;
 		rightPanel?: Snippet;
+		splitEnabled?: boolean;
 		splitDirection?: 'horizontal' | 'vertical';
 		initialSplit?: number;
 	} = $props();
@@ -34,7 +36,7 @@
 	{/if}
 
 	<div class="flex min-w-0 flex-1 flex-col">
-		{#if rightPanel}
+		{#if rightPanel && splitEnabled}
 			<SplitPane direction={splitDirection} {initialSplit}>
 				{#snippet first()}
 					{@render children()}

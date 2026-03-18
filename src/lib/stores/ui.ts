@@ -1,11 +1,12 @@
 import { writable } from 'svelte/store';
-import type { SidebarSection, UiState } from '$lib/types/store';
+import type { OmnibarMode, SidebarSection, UiState } from '$lib/types/store';
 
 function createUiStore() {
 	const { subscribe, update, set } = writable<UiState>({
 		sidebarOpen: true,
 		sidebarSection: 'explorer',
 		omnibarOpen: false,
+		omnibarMode: 'file',
 		rightPanelOpen: false
 	});
 
@@ -33,14 +34,43 @@ function createUiStore() {
 			update((s) => ({ ...s, sidebarSection: section, sidebarOpen: true }));
 		},
 
-		/** Toggle the omnibar overlay. */
+		/** Toggle the omnibar overlay (defaults to file mode). */
 		toggleOmnibar() {
-			update((s) => ({ ...s, omnibarOpen: !s.omnibarOpen }));
+			update((s) => ({
+				...s,
+				omnibarOpen: !s.omnibarOpen,
+				omnibarMode: s.omnibarOpen ? s.omnibarMode : 'file'
+			}));
 		},
 
-		/** Toggle the right (code) panel. */
+		/** Open the omnibar in a specific mode. */
+		openOmnibar(mode: OmnibarMode = 'file') {
+			update((s) => ({ ...s, omnibarOpen: true, omnibarMode: mode }));
+		},
+
+		/** Close the omnibar overlay. */
+		closeOmnibar() {
+			update((s) => ({ ...s, omnibarOpen: false }));
+		},
+
+		/** Switch the omnibar mode without closing it. */
+		setOmnibarMode(mode: OmnibarMode) {
+			update((s) => ({ ...s, omnibarMode: mode }));
+		},
+
+		/** Toggle side-by-side mode (note center + code right). */
 		toggleRightPanel() {
 			update((s) => ({ ...s, rightPanelOpen: !s.rightPanelOpen }));
+		},
+
+		/** Enable side-by-side mode. */
+		openRightPanel() {
+			update((s) => ({ ...s, rightPanelOpen: true }));
+		},
+
+		/** Disable side-by-side mode. */
+		closeRightPanel() {
+			update((s) => ({ ...s, rightPanelOpen: false }));
 		}
 	};
 }

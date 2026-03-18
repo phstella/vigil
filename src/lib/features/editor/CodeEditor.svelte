@@ -1,13 +1,36 @@
 <script lang="ts">
 	/**
-	 * CodeEditor -- Skeleton code editing surface with line numbers.
+	 * CodeEditor -- Monaco-powered code editing surface.
 	 *
-	 * Displays file path and detected language in a header, a simple
-	 * line-number gutter alongside a monospace textarea. This is a
-	 * placeholder for future Monaco integration.
+	 * Lazy-loads Monaco on first mount, applies the Vigil dark theme,
+	 * and syncs content/language with the code store. The editor container
+	 * auto-resizes via Monaco's `automaticLayout` option.
+	 *
+	 * Git gutter markers (Task 3.8): Shows added/modified/deleted line
+	 * indicators in the glyph margin. Refreshes on file open, content
+	 * edit (debounced), save, and backend `vigil://git-hunks` events.
+	 *
+	 * Performance targets (from editor-performance-budget.md):
+	 * - Keystroke-to-paint: <= 16 ms p95
+	 * - Scroll FPS: >= 60 FPS
+	 * - File switch: <= 120 ms
+	 * - Git hunk refresh: <= 200 ms for files under 5k lines
 	 */
 
-	import { codeStore } from './code-store';
+	import { onMount, onDestroy } from 'svelte';
+	import { codeStore } from './code-store.svelte';
+	import {
+		loadMonaco,
+		getDefaultEditorOptions,
+		detectMonacoLanguage,
+		VIGIL_THEME_NAME,
+		isMonacoLoaded
+	} from './monaco-config';
+	import { GutterController } from '$lib/features/git/gutter';
+	import { onGitHunks } from '$lib/ipc/events';
+	import { perfTimer } from '$lib/utils/perf';
+	import type * as Monaco from 'monaco-editor';
+	import type { UnlistenFn } from '@tauri-apps/api/event';
 
 	let {
 		filePath,
@@ -17,25 +40,137 @@
 		content: string;
 	} = $props();
 
-	// Sync incoming props into the local code store on load.
+	let containerEl: HTMLDivElement | undefined = $state();
+	let editor: Monaco.editor.IStandaloneCodeEditor | null = null;
+	let monacoRef: typeof Monaco | null = null;
+	let isLoading = $state(true);
+	let loadError: string | null = $state(null);
+
+	// Track the last filePath we set up so we can detect file switches
+	let currentFilePath: string | null = null;
+	let lastAppliedPropContent: string | null = null;
+
+	// Git gutter controller
+	let gutterController: GutterController | null = null;
+	let unlistenGitHunks: UnlistenFn | null = null;
+
+	// Sync incoming props into the local code store.
 	$effect(() => {
-		codeStore.load(filePath, content);
+		// Preserve unsaved buffer when remounting the same file in single-pane mode.
+		if (codeStore.filePath !== filePath) {
+			codeStore.load(filePath, content);
+		}
 	});
 
-	let lineCount = $derived(Math.max(1, codeStore.content.split('\n').length));
+	/**
+	 * When filePath or content props change after initial mount,
+	 * update the Monaco model accordingly.
+	 */
+	$effect(() => {
+		if (!editor || !monacoRef) return;
 
-	function handleInput(e: Event) {
-		const target = e.target as HTMLTextAreaElement;
-		codeStore.updateContent(target.value);
-	}
+		// Read these to track them as dependencies
+		const fp = filePath;
+		const ct = content;
+		const model = editor.getModel();
+		if (!model) return;
+		const didSwitchFile = fp !== currentFilePath;
 
-	/** Keep the gutter scroll in sync with the textarea. */
-	let gutterEl: HTMLDivElement | undefined = $state();
-	function handleScroll(e: Event) {
-		if (gutterEl) {
-			gutterEl.scrollTop = (e.target as HTMLTextAreaElement).scrollTop;
+		if (didSwitchFile) {
+			// File switched -- update model language.
+			const lang = detectMonacoLanguage(fp);
+			monacoRef.editor.setModelLanguage(model, lang);
+			currentFilePath = fp;
+
+			// Update git gutter for the new file
+			gutterController?.setFilePath(fp);
 		}
-	}
+
+		// Content can arrive asynchronously after the file path changes.
+		// Keep Monaco in sync whenever upstream props publish new content.
+		const shouldApplyPropContent =
+			didSwitchFile || (ct !== lastAppliedPropContent && codeStore.filePath !== fp);
+		if (shouldApplyPropContent) {
+			if (model.getValue() !== ct) {
+				// Avoid triggering our own onDidChangeModelContent handler with redundant writes.
+				model.setValue(ct);
+			}
+			lastAppliedPropContent = ct;
+		}
+	});
+
+	onMount(async () => {
+		if (!containerEl) return;
+
+		// First Monaco boot includes dynamic import + worker spin-up, so use a wider cold-start budget.
+		const mountTimer = perfTimer('editor-mount', isMonacoLoaded() ? 120 : 500);
+
+		try {
+			monacoRef = await loadMonaco();
+
+			const language = detectMonacoLanguage(filePath);
+			const options = getDefaultEditorOptions();
+			const initialContent = codeStore.filePath === filePath ? codeStore.content : content;
+
+			editor = monacoRef.editor.create(containerEl, {
+				...options,
+				value: initialContent,
+				language
+			});
+
+			// Ensure theme is applied
+			monacoRef.editor.setTheme(VIGIL_THEME_NAME);
+
+			currentFilePath = filePath;
+			lastAppliedPropContent = initialContent;
+
+			// Initialize git gutter controller
+			gutterController = new GutterController(editor);
+			gutterController.setFilePath(filePath);
+
+			// Subscribe to backend git hunk push events
+			unlistenGitHunks = await onGitHunks((payload) => {
+				if (payload.path === currentFilePath && gutterController) {
+					gutterController.applyHunks(payload.hunks);
+				}
+			});
+
+			// Sync content changes from Monaco back to the code store,
+			// and schedule a debounced git gutter refresh on edits.
+			editor.onDidChangeModelContent(() => {
+				const value = editor?.getValue() ?? '';
+				codeStore.updateContent(value);
+				gutterController?.scheduleRefresh();
+			});
+
+			isLoading = false;
+			mountTimer.stop();
+		} catch (err) {
+			console.error('[CodeEditor] Failed to load Monaco:', err);
+			loadError = err instanceof Error ? err.message : 'Failed to load editor';
+			isLoading = false;
+			mountTimer.stop();
+		}
+	});
+
+	onDestroy(() => {
+		// Clean up git gutter controller
+		if (gutterController) {
+			gutterController.dispose();
+			gutterController = null;
+		}
+
+		// Unsubscribe from git hunk events
+		if (unlistenGitHunks) {
+			unlistenGitHunks();
+			unlistenGitHunks = null;
+		}
+
+		if (editor) {
+			editor.dispose();
+			editor = null;
+		}
+	});
 </script>
 
 <div class="flex h-full flex-col bg-surface-base">
@@ -61,38 +196,31 @@
 			{codeStore.language}
 		</span>
 		{#if codeStore.isDirty}
-			<span
-				class="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent"
-				title="Unsaved changes"
+			<span class="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent" title="Unsaved changes"
 			></span>
 		{/if}
 	</header>
 
-	<!-- Code editing area with line-number gutter (placeholder for Monaco) -->
-	<div class="flex flex-1 overflow-hidden">
-		<!-- Line number gutter -->
-		<div
-			bind:this={gutterEl}
-			class="shrink-0 select-none overflow-hidden border-r border-surface-border bg-surface-raised py-2 pr-2 text-right"
-			aria-hidden="true"
-		>
-			{#each Array.from({ length: lineCount }, (__, n) => n + 1) as lineNum (lineNum)}
-				<div class="px-2 font-mono text-xs leading-5 text-text-muted">
-					{lineNum}
+	<!-- Monaco editor container -->
+	<div class="relative flex-1 overflow-hidden">
+		{#if isLoading}
+			<div class="flex h-full items-center justify-center">
+				<span class="text-sm text-text-muted">Loading editor...</span>
+			</div>
+		{:else if loadError}
+			<div class="flex h-full items-center justify-center">
+				<div class="text-center">
+					<span class="text-sm text-error">Editor failed to load</span>
+					<p class="mt-1 text-xs text-text-muted">{loadError}</p>
 				</div>
-			{/each}
-		</div>
-
-		<!-- Code textarea -->
-		<textarea
-			class="flex-1 resize-none border-none bg-transparent py-2 pl-3 font-mono text-sm leading-5 text-text-primary outline-none placeholder:text-text-muted"
-			placeholder="// Code goes here..."
-			value={codeStore.content}
-			oninput={handleInput}
-			onscroll={handleScroll}
-			spellcheck="false"
+			</div>
+		{/if}
+		<div
+			bind:this={containerEl}
+			class="absolute inset-0"
+			class:invisible={isLoading || !!loadError}
+			role="code"
 			aria-label="Code editor"
-			wrap="off"
-		></textarea>
+		></div>
 	</div>
 </div>

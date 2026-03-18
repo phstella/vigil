@@ -5,7 +5,7 @@
 	 * a document icon. Selected file is highlighted.
 	 */
 
-	import type { TreeNode } from './explorer-store';
+	import type { TreeNode } from './explorer-store.svelte';
 
 	let {
 		node,

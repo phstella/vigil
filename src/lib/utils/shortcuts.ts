@@ -25,7 +25,10 @@ const INPUT_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
  * Sorts modifier keys (alt, ctrl, meta, shift) before the base key.
  */
 function normalizeCombo(combo: string): string {
-	const parts = combo.toLowerCase().split('+').map((p) => p.trim());
+	const parts = combo
+		.toLowerCase()
+		.split('+')
+		.map((p) => p.trim());
 	const modifiers: string[] = [];
 	let key = '';
 	for (const part of parts) {

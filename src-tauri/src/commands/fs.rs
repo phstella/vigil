@@ -1,7 +1,8 @@
 //! File read/write/rename/delete command wrappers.
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
+use crate::events::fs_events;
 use crate::models::error::VigilError;
 use crate::models::files::{
     CreateNoteRequest, CreateNoteResponse, DeleteFileResponse, ListDirResponse, ReadFileResponse,
@@ -62,9 +63,12 @@ pub async fn rename_file(
     old_path: String,
     new_path: String,
     state: State<'_, AppState>,
+    app_handle: AppHandle,
 ) -> Result<RenameFileResponse, VigilError> {
     let ws = require_workspace(&state)?;
-    ws.rename_file(&old_path, &new_path)
+    let response = ws.rename_file(&old_path, &new_path)?;
+    fs_events::emit_fs_renamed(&app_handle, &old_path, &new_path);
+    Ok(response)
 }
 
 /// Delete a file or empty directory within the workspace.

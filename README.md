@@ -30,3 +30,10 @@ Run [`docs/setup/verification.md`](docs/setup/verification.md) commands to confi
 ## Docs
 
 Planning docs live in [docs/README.md](docs/README.md).
+
+## Delivery Process
+
+Repository-level execution/review standards for local agents and contributors:
+
+1. [AGENTS.md](AGENTS.md)
+2. [Process Docs](docs/process/README.md)

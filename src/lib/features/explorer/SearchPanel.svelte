@@ -6,7 +6,7 @@
 	 * fuzzy_find commands in a later epic.
 	 */
 
-	import { searchStore } from './explorer-store';
+	import { searchStore } from './explorer-store.svelte';
 
 	let inputValue = $state('');
 	let debounceTimer = $state<ReturnType<typeof setTimeout> | null>(null);
@@ -34,7 +34,10 @@
 		}
 	}
 
-	function highlightMatch(text: string, query: string): { before: string; match: string; after: string } | null {
+	function highlightMatch(
+		text: string,
+		query: string
+	): { before: string; match: string; after: string } | null {
 		if (!query) return null;
 		const lower = text.toLowerCase();
 		const idx = lower.indexOf(query.toLowerCase());
@@ -81,7 +84,13 @@
 						rounded text-text-muted hover:text-text-primary"
 					aria-label="Clear search"
 				>
-					<svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<svg
+						class="h-3 w-3"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+					>
 						<path d="M18 6L6 18M6 6l12 12" />
 					</svg>
 				</button>
@@ -129,7 +138,9 @@
 		{:else}
 			<!-- Results list -->
 			<div class="px-1 pb-2">
-				<p class="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted">
+				<p
+					class="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted"
+				>
 					{results.length} result{results.length === 1 ? '' : 's'}
 				</p>
 				<ul class="list-none p-0">
@@ -149,9 +160,14 @@
 										:{result.lineNumber}
 									</span>
 								</div>
-								<div class="truncate font-mono text-[11px] leading-relaxed text-text-muted">
+								<div
+									class="truncate font-mono text-[11px] leading-relaxed text-text-muted"
+								>
 									{#if parts}
-										{parts.before}<span class="rounded-sm bg-accent/20 text-accent">{parts.match}</span>{parts.after}
+										{parts.before}<span
+											class="rounded-sm bg-accent/20 text-accent"
+											>{parts.match}</span
+										>{parts.after}
 									{:else}
 										{result.lineContent}
 									{/if}

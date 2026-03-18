@@ -16,7 +16,7 @@ export { fuzzyFind, searchContent, getAllTags, getFilesByTag } from './search';
 
 export { getGitHunks, getGitStatus } from './git';
 
-export { getBacklinks } from './links';
+export { getBacklinks, getNoteGraph } from './links';
 
 export { workspaceStatus } from './status';
 
@@ -25,5 +25,6 @@ export {
 	onIndexUpdated,
 	onIndexReady,
 	onGitHunks,
-	onStatusUpdated
+	onStatusUpdated,
+	onFsRenamed
 } from './events';

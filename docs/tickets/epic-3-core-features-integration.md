@@ -1,5 +1,13 @@
 # Epic 3: Core Features Integration
 
+> Status: Legacy planning document (pre-unified backlog rebaseline).
+>
+> Canonical Epic 3 scope and task IDs are maintained in:
+> - `docs/tickets/00-unified-vigil-backlog.md` (source of truth)
+> - `docs/tickets/00-mvp-execution-order.md` (execution order)
+>
+> Use those two documents for closeout/sign-off decisions. This file is retained for historical context only.
+
 ## Task [3.1]: Integrate Monaco in Right Code Pane
 Goal: Deliver a performant code-editing surface with minimal configuration overhead.
 Commands/Code:

@@ -11,7 +11,8 @@
 4. [Epic 1: Backend Foundation](tickets/epic-1-backend-foundation.md)
 5. [Epic 2: Frontend Skeleton](tickets/epic-2-frontend-skeleton.md)
 6. [Epic 3: Core Features Integration](tickets/epic-3-core-features-integration.md)
-7. [Epic 4: Advanced Editing + Expandability](tickets/epic-4-advanced-editing-expandability.md)
+7. [Epic 3.5: Editor Workflow Stabilization & UX Cleanup](tickets/epic-3.5-editor-workflow-stability.md)
+8. [Epic 4: Advanced Editing + Expandability](tickets/epic-4-advanced-editing-expandability.md)
 
 ## Architecture
 - [Repository Architecture](architecture/01-repository-architecture.md)
@@ -30,9 +31,15 @@
 ## QA
 - [Test Matrix](qa/test-matrix.md)
 
+## Process
+- [Process Docs Index](process/README.md)
+- [Epic Completion Checklist](process/epic-completion-checklist.md)
+- [Agent Handoff Template](process/agent-handoff-template.md)
+- [PR Review Rubric](process/pr-review-rubric.md)
+
 ## MVP Scope
 
-Epics 0-3 define the MVP baseline. Epic 4 is post-MVP expansion.
+Epics 0-3 define the MVP baseline. Epic 3.5 is post-MVP stabilization and Epic 4 is post-MVP expansion.
 
 **Out of scope:** Vim mode, plugin store/marketplace flow.
 

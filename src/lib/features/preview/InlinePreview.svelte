@@ -5,16 +5,78 @@
 	 * Takes raw markdown content and renders it as styled HTML.
 	 * Used as the WYSIWYG/preview half of the Ctrl+. toggle in NoteEditor.
 	 * The raw text is never modified by this component; it is read-only.
+	 *
+	 * Fenced ```mermaid blocks are detected in the rendered HTML (as .md-mermaid
+	 * marker divs) and replaced with live MermaidBlock component instances
+	 * that render diagrams via the mermaid library.
 	 */
 
 	import { markdownToHtml } from '$lib/utils/markdown';
+	import { mount, unmount } from 'svelte';
+	import MermaidBlock from './MermaidBlock.svelte';
 
 	let { content }: { content: string } = $props();
 
 	let renderedHtml = $derived(markdownToHtml(content));
+
+	let previewRef: HTMLDivElement | null = $state(null);
+
+	// Track mounted MermaidBlock instances for cleanup.
+	let mountedBlocks: ReturnType<typeof mount>[] = [];
+
+	function destroyMountedBlocks() {
+		for (const block of mountedBlocks) {
+			try {
+				unmount(block);
+			} catch {
+				// Ignore unmount errors for already-removed DOM nodes.
+			}
+		}
+		mountedBlocks = [];
+	}
+
+	// After each HTML render, scan for mermaid marker divs and mount components.
+	$effect(() => {
+		// Subscribe to renderedHtml so this re-runs on content changes.
+		void renderedHtml;
+
+		// Use a microtask to ensure the DOM has been updated by {@html}.
+		const frame = requestAnimationFrame(() => {
+			if (!previewRef) return;
+
+			destroyMountedBlocks();
+
+			const mermaidDivs = previewRef.querySelectorAll<HTMLDivElement>('.md-mermaid');
+			for (const div of mermaidDivs) {
+				const encoded = div.getAttribute('data-mermaid-source');
+				if (!encoded) continue;
+
+				try {
+					const source = decodeURIComponent(escape(atob(encoded)));
+
+					// Clear the marker div and mount a MermaidBlock into it.
+					div.textContent = '';
+					const block = mount(MermaidBlock, {
+						target: div,
+						props: { source }
+					});
+					mountedBlocks.push(block);
+				} catch {
+					// If base64 decoding fails, show raw encoded content as fallback.
+					div.textContent = `[Mermaid decode error]`;
+				}
+			}
+		});
+
+		return () => {
+			cancelAnimationFrame(frame);
+			destroyMountedBlocks();
+		};
+	});
 </script>
 
 <div
+	bind:this={previewRef}
 	class="md-preview h-full overflow-auto p-6 font-sans text-sm leading-relaxed text-text-primary"
 	role="document"
 	aria-label="Markdown preview"

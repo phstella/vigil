@@ -15,8 +15,9 @@ Define a deterministic, keyboard-centric interaction model.
 - `Ctrl+1`: focus explorer
 - `Ctrl+2`: focus center note pane
 - `Ctrl+3`: focus right code pane
-- `Ctrl+Tab`: next open tab/pane item
-- `Ctrl+Shift+Tab`: previous open tab/pane item
+- `Ctrl+Tab`: cycle to next open tab
+- `Ctrl+Shift+Tab`: cycle to previous open tab
+- `Ctrl+W`: close active tab
 
 ## Omnibar Controls
 - `Enter`: open selected item/execute command

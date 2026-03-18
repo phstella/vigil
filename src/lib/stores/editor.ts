@@ -17,6 +17,47 @@ function createEditorStore() {
 		conflictFiles: new Set<string>()
 	});
 
+	/**
+	 * Save the current active tab's content into its openFiles entry
+	 * so it can be restored when switching back.
+	 */
+	function cacheActiveContent(s: EditorState): OpenFile[] {
+		if (!s.activeFile) return s.openFiles;
+		return s.openFiles.map((f) =>
+			f.path === s.activeFile ? { ...f, content: s.content, isDirty: s.isDirty } : f
+		);
+	}
+
+	/**
+	 * Restore state fields from a tab's cached data.
+	 */
+	function restoreFromTab(
+		s: EditorState,
+		tab: OpenFile
+	): Partial<EditorState> {
+		const base: Partial<EditorState> = {
+			activeFile: tab.path,
+			content: tab.content,
+			language: tab.language,
+			isDirty: tab.isDirty
+		};
+
+		if (isMarkdownFile(tab.path)) {
+			return {
+				...base,
+				noteFile: tab.path,
+				noteContent: tab.content
+			};
+		} else {
+			return {
+				...base,
+				codeFile: tab.path,
+				codeContent: tab.content,
+				codeLanguage: tab.language
+			};
+		}
+	}
+
 	return {
 		subscribe,
 		set,
@@ -24,10 +65,15 @@ function createEditorStore() {
 		/** Open a file (or switch to it if already open). */
 		openFile(path: string, content: string, language: string) {
 			update((s) => {
-				const exists = s.openFiles.some((f) => f.path === path);
+				// Cache current tab's content before switching
+				const cachedFiles = cacheActiveContent(s);
+
+				const exists = cachedFiles.some((f) => f.path === path);
 				const openFiles: OpenFile[] = exists
-					? s.openFiles
-					: [...s.openFiles, { path, isDirty: false, language }];
+					? cachedFiles.map((f) =>
+							f.path === path ? { ...f, content, language } : f
+						)
+					: [...cachedFiles, { path, isDirty: false, language, content }];
 
 				const base = {
 					...s,
@@ -65,6 +111,58 @@ function createEditorStore() {
 			this.openFile(path, content, language);
 		},
 
+		/**
+		 * Activate an already-open tab by path, restoring its cached content.
+		 * Returns false if the tab is not open. Does not trigger IPC -- content
+		 * is restored from the in-memory cache built by openFile/updateContent.
+		 */
+		activateTab(path: string) {
+			update((s) => {
+				if (s.activeFile === path) return s;
+				const tab = s.openFiles.find((f) => f.path === path);
+				if (!tab) return s;
+
+				// Cache current tab's content before switching
+				const openFiles = cacheActiveContent(s);
+
+				return {
+					...s,
+					openFiles,
+					...restoreFromTab(s, tab)
+				};
+			});
+		},
+
+		/**
+		 * Cycle to the next open tab. Wraps around at the end.
+		 */
+		nextTab() {
+			update((s) => {
+				if (s.openFiles.length <= 1) return s;
+				const idx = s.openFiles.findIndex((f) => f.path === s.activeFile);
+				const nextIdx = (idx + 1) % s.openFiles.length;
+				const tab = s.openFiles[nextIdx];
+
+				const openFiles = cacheActiveContent(s);
+				return { ...s, openFiles, ...restoreFromTab(s, tab) };
+			});
+		},
+
+		/**
+		 * Cycle to the previous open tab. Wraps around at the beginning.
+		 */
+		prevTab() {
+			update((s) => {
+				if (s.openFiles.length <= 1) return s;
+				const idx = s.openFiles.findIndex((f) => f.path === s.activeFile);
+				const prevIdx = (idx - 1 + s.openFiles.length) % s.openFiles.length;
+				const tab = s.openFiles[prevIdx];
+
+				const openFiles = cacheActiveContent(s);
+				return { ...s, openFiles, ...restoreFromTab(s, tab) };
+			});
+		},
+
 		/** Close a file tab. If it was active, activate an adjacent tab or clear. */
 		closeFile(path: string) {
 			update((s) => {
@@ -84,29 +182,65 @@ function createEditorStore() {
 						language = 'plaintext';
 						isDirty = false;
 					} else {
+						// Activate the nearest remaining tab, preferring the one to the left
 						const next = openFiles[Math.min(idx, openFiles.length - 1)];
 						activeFile = next.path;
+						content = next.content;
 						language = next.language;
 						isDirty = next.isDirty;
-						// Content must be loaded externally after switching;
-						// we keep the previous content until then.
 					}
 				}
 
 				// Clear the appropriate pane if its file was closed
 				const result = { ...s, activeFile, openFiles, content, language, isDirty };
 				if (isMarkdownFile(path) && s.noteFile === path) {
-					result.noteFile = null;
-					result.noteContent = '';
+					result.noteFile = activeFile && isMarkdownFile(activeFile) ? activeFile : null;
+					result.noteContent =
+						activeFile && isMarkdownFile(activeFile) ? content : '';
 				}
 				if (!isMarkdownFile(path) && s.codeFile === path) {
-					result.codeFile = null;
-					result.codeContent = '';
-					result.codeLanguage = 'plaintext';
+					result.codeFile = activeFile && !isMarkdownFile(activeFile) ? activeFile : null;
+					result.codeContent =
+						activeFile && !isMarkdownFile(activeFile) ? content : '';
+					result.codeLanguage =
+						activeFile && !isMarkdownFile(activeFile) ? language : 'plaintext';
+				}
+
+				// If the new active file is a note, set note pane identity
+				if (activeFile && isMarkdownFile(activeFile)) {
+					result.noteFile = activeFile;
+					result.noteContent = content;
+				}
+				// If the new active file is a code file, set code pane identity
+				if (activeFile && !isMarkdownFile(activeFile)) {
+					result.codeFile = activeFile;
+					result.codeContent = content;
+					result.codeLanguage = language;
 				}
 
 				return result;
 			});
+		},
+
+		/**
+		 * Close the currently active tab.
+		 * Convenience wrapper around closeFile for keyboard shortcut use.
+		 */
+		closeActiveTab() {
+			update((s) => {
+				if (!s.activeFile) return s;
+				// Re-use the closeFile logic inline to avoid calling update twice
+				return s;
+			});
+			// Read current active file and delegate
+			let currentActive: string | null = null;
+			const unsub = subscribe((s) => {
+				currentActive = s.activeFile;
+			});
+			unsub();
+			if (currentActive) {
+				this.closeFile(currentActive);
+			}
 		},
 
 		/** Mark the active file as dirty or clean. */
@@ -119,9 +253,14 @@ function createEditorStore() {
 			});
 		},
 
-		/** Replace the active file's content buffer. */
+		/** Replace the active file's content buffer and update tab cache. */
 		updateContent(content: string) {
-			update((s) => ({ ...s, content }));
+			update((s) => {
+				const openFiles = s.openFiles.map((f) =>
+					f.path === s.activeFile ? { ...f, content } : f
+				);
+				return { ...s, content, openFiles };
+			});
 		},
 
 		/**
@@ -156,8 +295,10 @@ function createEditorStore() {
 			update((s) => {
 				const exists = s.openFiles.some((f) => f.path === path);
 				const openFiles: OpenFile[] = exists
-					? s.openFiles
-					: [...s.openFiles, { path, isDirty: false, language: 'markdown' }];
+					? s.openFiles.map((f) =>
+							f.path === path ? { ...f, content } : f
+						)
+					: [...s.openFiles, { path, isDirty: false, language: 'markdown', content }];
 
 				return {
 					...s,
@@ -202,7 +343,6 @@ function createEditorStore() {
 			update((s) => {
 				const isOpen = s.openFiles.some((f) => f.path === path);
 				if (!isOpen) return s;
-				// Delegate to closeFile logic
 				const idx = s.openFiles.findIndex((f) => f.path === path);
 				if (idx === -1) return s;
 
@@ -223,6 +363,7 @@ function createEditorStore() {
 					} else {
 						const next = openFiles[Math.min(idx, openFiles.length - 1)];
 						activeFile = next.path;
+						content = next.content;
 						language = next.language;
 						isDirty = next.isDirty;
 					}

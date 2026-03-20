@@ -181,10 +181,22 @@ export function markdownToHtml(markdown: string): string {
 				i++;
 			}
 			i++; // skip closing fence
-			const langAttr = lang ? ` data-language="${escapeHtml(lang)}"` : '';
-			outputBlocks.push(
-				`<pre class="md-code-block"${langAttr}><code>${codeLines.join('\n')}</code></pre>`
-			);
+
+			// Mermaid blocks emit a special marker div for client-side rendering.
+			// The raw source is stored in a data attribute (base64-encoded to avoid
+			// HTML escaping issues with quotes/angles inside mermaid definitions).
+			if (lang.toLowerCase() === 'mermaid') {
+				const rawSource = codeLines.join('\n');
+				const encoded = btoa(unescape(encodeURIComponent(rawSource)));
+				outputBlocks.push(
+					`<div class="md-mermaid" data-mermaid-source="${encoded}"></div>`
+				);
+			} else {
+				const langAttr = lang ? ` data-language="${escapeHtml(lang)}"` : '';
+				outputBlocks.push(
+					`<pre class="md-code-block"${langAttr}><code>${codeLines.join('\n')}</code></pre>`
+				);
+			}
 			continue;
 		}
 

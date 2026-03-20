@@ -47,6 +47,8 @@ export interface OpenFile {
 	path: string;
 	isDirty: boolean;
 	language: string;
+	/** Cached content for this tab, enabling lossless tab switching. */
+	content: string;
 }
 
 export interface EditorState {

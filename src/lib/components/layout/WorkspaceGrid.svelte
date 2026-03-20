@@ -12,7 +12,7 @@
 		sidebar,
 		children,
 		rightPanel,
-		splitEnabled = true,
+		splitEnabled = false,
 		splitDirection = 'horizontal',
 		initialSplit = 50
 	}: {

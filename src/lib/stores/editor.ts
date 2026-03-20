@@ -18,25 +18,14 @@ function createEditorStore() {
 	});
 
 	/**
-	 * Registered callback that returns the live editor content for the
-	 * active file. Called by cacheActiveContent so the tab cache always
-	 * captures unsaved edits regardless of which flow triggers a file switch.
-	 */
-	let liveContentProvider: (() => { content: string; isDirty: boolean } | null) | null = null;
-
-	/**
 	 * Save the current active tab's content into its openFiles entry
 	 * so it can be restored when switching back.
-	 *
-	 * Consults the registered liveContentProvider to get the freshest
-	 * content from codeStore/noteStore, avoiding stale-cache data loss.
 	 */
 	function cacheActiveContent(s: EditorState): OpenFile[] {
 		if (!s.activeFile) return s.openFiles;
-		const live = liveContentProvider?.();
-		const content = live?.content ?? s.content;
-		const isDirty = live?.isDirty ?? s.isDirty;
-		return s.openFiles.map((f) => (f.path === s.activeFile ? { ...f, content, isDirty } : f));
+		return s.openFiles.map((f) =>
+			f.path === s.activeFile ? { ...f, content: s.content, isDirty: s.isDirty } : f
+		);
 	}
 
 	/**
@@ -257,26 +246,14 @@ function createEditorStore() {
 			});
 		},
 
-		/** Replace the active file's content buffer and update tab cache. */
+		/** Replace the active file's content buffer, mark dirty, and update tab cache. */
 		updateContent(content: string) {
 			update((s) => {
 				const openFiles = s.openFiles.map((f) =>
-					f.path === s.activeFile ? { ...f, content } : f
+					f.path === s.activeFile ? { ...f, content, isDirty: true } : f
 				);
-				return { ...s, content, openFiles };
+				return { ...s, content, isDirty: true, openFiles };
 			});
-		},
-
-		/**
-		 * Register a callback that provides live editor content for the
-		 * active file. This is called by cacheActiveContent to capture
-		 * unsaved edits from codeStore/noteStore without per-keystroke
-		 * store updates that can cause reactivity cascades.
-		 */
-		registerLiveContentProvider(
-			provider: (() => { content: string; isDirty: boolean } | null) | null
-		) {
-			liveContentProvider = provider;
 		},
 
 		/**

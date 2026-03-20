@@ -112,6 +112,7 @@
 	function handleInput(e: Event) {
 		const target = e.target as HTMLTextAreaElement;
 		noteStore.updateContent(target.value);
+		editorStore.updateContent(target.value);
 		checkAutocomplete(target);
 	}
 
@@ -156,6 +157,7 @@
 		const cursorPos = textareaRef.selectionStart;
 		const result = insertWikilink(textareaRef.value, cursorPos, noteName);
 		noteStore.updateContent(result.text);
+		editorStore.updateContent(result.text);
 
 		// Update textarea and move cursor
 		textareaRef.value = result.text;

@@ -141,6 +141,7 @@
 			try {
 				await writeFile(codeStore.filePath, codeStore.content);
 				codeStore.markClean();
+				editorStore.setDirty(false);
 			} catch (err: unknown) {
 				const message = err instanceof Error ? err.message : String(err);
 				console.error('[shortcut] code save failed:', message);
@@ -155,13 +156,41 @@
 		console.log('[shortcut] create new note');
 	}
 
+	/**
+	 * Flush live editor content from codeStore/noteStore back into editorStore
+	 * so the tab cache captures unsaved edits before any tab switch or close.
+	 */
+	function flushLiveContent() {
+		if (!editorState.activeFile) return;
+		if (
+			!isMarkdownFile(editorState.activeFile) &&
+			codeStore.filePath === editorState.activeFile
+		) {
+			editorStore.updateContent(codeStore.content);
+			if (codeStore.isDirty !== editorState.isDirty) {
+				editorStore.setDirty(codeStore.isDirty);
+			}
+		}
+		if (
+			isMarkdownFile(editorState.activeFile) &&
+			noteStore.filePath === editorState.activeFile
+		) {
+			editorStore.updateContent(noteStore.content);
+			if (noteStore.isDirty !== editorState.isDirty) {
+				editorStore.setDirty(noteStore.isDirty);
+			}
+		}
+	}
+
 	/** Handle tab activation from the tab bar. */
 	function handleTabActivate(path: string) {
+		flushLiveContent();
 		editorStore.activateTab(path);
 	}
 
 	/** Handle tab close from the tab bar. */
 	function handleTabClose(path: string) {
+		flushLiveContent();
 		editorStore.closeFile(path);
 	}
 
@@ -182,21 +211,6 @@
 	});
 
 	onMount(() => {
-		// Register a live content provider so editorStore.cacheActiveContent
-		// always captures the latest unsaved edits from codeStore/noteStore,
-		// regardless of which flow triggers a file switch.
-		editorStore.registerLiveContentProvider(() => {
-			const active = editorState.activeFile;
-			if (!active) return null;
-			if (!isMarkdownFile(active) && codeStore.filePath === active) {
-				return { content: codeStore.content, isDirty: codeStore.isDirty };
-			}
-			if (isMarkdownFile(active) && noteStore.filePath === active) {
-				return { content: noteStore.content, isDirty: noteStore.isDirty };
-			}
-			return null;
-		});
-
 		cleanupEditorSubscription = editorStore.subscribe((s) => {
 			editorState = s;
 		});
@@ -220,10 +234,31 @@
 		shortcutRegistry.register('ctrl+\\', () => uiStore.toggleRightPanel(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
 		shortcutRegistry.register('ctrl+.', () => noteStore.toggleViewMode(), { global: true });
-		// Tab navigation shortcuts
-		shortcutRegistry.register('ctrl+tab', () => editorStore.nextTab(), { global: true });
-		shortcutRegistry.register('ctrl+shift+tab', () => editorStore.prevTab(), { global: true });
-		shortcutRegistry.register('ctrl+w', () => editorStore.closeActiveTab(), { global: true });
+		// Tab navigation shortcuts — flush live edits before switching
+		shortcutRegistry.register(
+			'ctrl+tab',
+			() => {
+				flushLiveContent();
+				editorStore.nextTab();
+			},
+			{ global: true }
+		);
+		shortcutRegistry.register(
+			'ctrl+shift+tab',
+			() => {
+				flushLiveContent();
+				editorStore.prevTab();
+			},
+			{ global: true }
+		);
+		shortcutRegistry.register(
+			'ctrl+w',
+			() => {
+				flushLiveContent();
+				editorStore.closeActiveTab();
+			},
+			{ global: true }
+		);
 
 		window.addEventListener('mousemove', handleActivity, { capture: true, passive: true });
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
@@ -269,7 +304,6 @@
 		// Tear down file-watcher event subscriptions
 		teardownFileWatcher();
 
-		editorStore.registerLiveContentProvider(null);
 		cleanupEditorSubscription?.();
 		cleanupUiSubscription?.();
 		cleanupSettingsSubscription?.();

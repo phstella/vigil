@@ -19,7 +19,6 @@
 
 	import { onMount, onDestroy } from 'svelte';
 	import { codeStore } from './code-store.svelte';
-	import { editorStore } from '$lib/stores/editor';
 	import {
 		loadMonaco,
 		getDefaultEditorOptions,
@@ -152,13 +151,11 @@
 				}
 			});
 
-			// Sync content changes from Monaco back to both the code store
-			// and the editor store tab cache, preventing data loss on tab switch.
+			// Sync content changes from Monaco back to the code store,
+			// and schedule a debounced git gutter refresh on edits.
 			editor.onDidChangeModelContent(() => {
 				const value = editor?.getValue() ?? '';
 				codeStore.updateContent(value);
-				editorStore.updateContent(value);
-				editorStore.setDirty(true);
 				gutterController?.scheduleRefresh();
 			});
 

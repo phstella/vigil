@@ -55,6 +55,7 @@
 	let retryCount = $state(0);
 	let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 	let destroyed = false;
+	let initAttemptId = 0;
 
 	// Track the last filePath we set up so we can detect file switches
 	let currentFilePath: string | null = null;
@@ -116,14 +117,26 @@
 	async function initMonaco(): Promise<void> {
 		if (!containerEl || destroyed) return;
 
+		const attemptId = ++initAttemptId;
 		isLoading = true;
 		loadError = null;
 
 		// First Monaco boot includes dynamic import + worker spin-up, so use a wider cold-start budget.
 		const mountTimer = perfTimer('editor-mount', isMonacoLoaded() ? 120 : 500);
+		let mountTimerStopped = false;
+		const stopMountTimer = () => {
+			if (mountTimerStopped) return;
+			mountTimerStopped = true;
+			mountTimer.stop();
+		};
 
 		try {
-			monacoRef = await loadMonaco();
+			const loadedMonaco = await loadMonaco();
+			if (destroyed || attemptId !== initAttemptId || !containerEl) {
+				stopMountTimer();
+				return;
+			}
+			monacoRef = loadedMonaco;
 
 			const language = detectMonacoLanguage(filePath);
 			const options = getDefaultEditorOptions();
@@ -145,13 +158,6 @@
 			gutterController = new GutterController(editor);
 			gutterController.setFilePath(filePath);
 
-			// Subscribe to backend git hunk push events
-			unlistenGitHunks = await onGitHunks((payload) => {
-				if (payload.path === currentFilePath && gutterController) {
-					gutterController.applyHunks(payload.hunks);
-				}
-			});
-
 			// Sync content changes from Monaco back to both the code store
 			// and the editor store tab cache, preventing data loss on tab switch.
 			editor.onDidChangeModelContent(() => {
@@ -161,11 +167,43 @@
 				gutterController?.scheduleRefresh();
 			});
 
+			// Subscribe to backend git hunk push events. Gutter events are optional;
+			// a failed listener must not make the whole editor fail to mount.
+			try {
+				const unlisten = await onGitHunks((payload) => {
+					if (payload.path === currentFilePath && gutterController) {
+						gutterController.applyHunks(payload.hunks);
+					}
+				});
+				if (destroyed || attemptId !== initAttemptId) {
+					unlisten();
+					stopMountTimer();
+					return;
+				}
+				unlistenGitHunks = unlisten;
+			} catch (err) {
+				if (destroyed || attemptId !== initAttemptId) {
+					stopMountTimer();
+					return;
+				}
+				console.warn(
+					'[CodeEditor] Git hunk listener unavailable; editor will continue:',
+					err
+				);
+			}
+
+			if (destroyed || attemptId !== initAttemptId) {
+				stopMountTimer();
+				return;
+			}
+
 			isLoading = false;
 			retryCount = 0;
-			mountTimer.stop();
+			stopMountTimer();
 		} catch (err) {
-			mountTimer.stop();
+			stopMountTimer();
+			if (destroyed || attemptId !== initAttemptId) return;
+
 			console.error(
 				`[CodeEditor] Failed to load Monaco (attempt ${retryCount + 1}/${MAX_AUTO_RETRIES + 1}):`,
 				err
@@ -208,6 +246,7 @@
 
 	onDestroy(() => {
 		destroyed = true;
+		initAttemptId += 1;
 
 		// Cancel any pending retry timeout
 		if (retryTimeoutId !== null) {

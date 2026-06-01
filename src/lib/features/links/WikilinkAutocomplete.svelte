@@ -7,6 +7,7 @@
 	 * to the parent container.
 	 */
 
+	import { onDestroy } from 'svelte';
 	import { fuzzyFind } from '$lib/ipc/search';
 	import type { FuzzyMatch } from '$lib/types/ipc';
 
@@ -38,38 +39,61 @@
 
 	/** Debounce timer for search. */
 	let searchTimer: ReturnType<typeof setTimeout> | null = null;
+	let searchRequestId = 0;
+	let destroyed = false;
 
 	const DEBOUNCE_MS = 80;
 	const MAX_RESULTS = 10;
 
+	function clearSearchTimer() {
+		if (searchTimer) {
+			clearTimeout(searchTimer);
+			searchTimer = null;
+		}
+	}
+
 	// React to query changes
 	$effect(() => {
+		clearSearchTimer();
+		const requestId = ++searchRequestId;
+
 		if (!visible) {
 			matches = [];
 			selectedIndex = 0;
+			isSearching = false;
 			return;
 		}
-
-		if (searchTimer) clearTimeout(searchTimer);
 
 		const q = query;
 		searchTimer = setTimeout(() => {
 			searchTimer = null;
-			void performSearch(q);
+			void performSearch(q, requestId);
 		}, DEBOUNCE_MS);
+
+		return clearSearchTimer;
 	});
 
-	async function performSearch(q: string) {
+	onDestroy(() => {
+		destroyed = true;
+		searchRequestId += 1;
+		clearSearchTimer();
+	});
+
+	async function performSearch(q: string, requestId: number) {
 		isSearching = true;
 		try {
 			// Filter to .md files by searching and filtering results
 			const response = await fuzzyFind(q, MAX_RESULTS * 2);
+			if (destroyed || requestId !== searchRequestId) return;
 			matches = response.matches.filter((m) => m.path.endsWith('.md')).slice(0, MAX_RESULTS);
 			selectedIndex = 0;
 		} catch {
+			if (destroyed || requestId !== searchRequestId) return;
 			matches = [];
 		} finally {
-			isSearching = false;
+			if (!destroyed && requestId === searchRequestId) {
+				isSearching = false;
+			}
 		}
 	}
 

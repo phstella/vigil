@@ -1,3 +1,12 @@
+<script module lang="ts">
+	let mermaidRenderId = 0;
+
+	function nextMermaidRenderId(): number {
+		mermaidRenderId += 1;
+		return mermaidRenderId;
+	}
+</script>
+
 <script lang="ts">
 	/**
 	 * MermaidBlock -- Renders a single Mermaid diagram from a raw definition string.
@@ -10,26 +19,34 @@
 	 * No remote resources are loaded.
 	 */
 
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 
 	let { source }: { source: string } = $props();
 
 	let containerRef: HTMLDivElement | null = $state(null);
 	let errorMessage = $state<string | null>(null);
 
-	// Unique ID counter for mermaid render calls (must be unique per render).
-	let renderCounter = 0;
+	// Unique ID counter for mermaid render calls (must be unique across blocks).
+	let renderSerial = 0;
+	let destroyed = false;
 
 	onMount(() => {
 		void renderDiagram();
 	});
 
+	onDestroy(() => {
+		destroyed = true;
+		renderSerial += 1;
+	});
+
 	async function renderDiagram() {
 		if (!containerRef || !source.trim()) return;
+		const serial = ++renderSerial;
 
 		try {
 			// Dynamic import to code-split mermaid out of the main bundle.
 			const mermaid = await import('mermaid');
+			if (destroyed || serial !== renderSerial || !containerRef) return;
 
 			mermaid.default.initialize({
 				startOnLoad: false,
@@ -40,16 +57,16 @@
 				logLevel: 4 // ERROR only
 			});
 
-			renderCounter += 1;
-			const id = `mermaid-block-${Date.now()}-${renderCounter}`;
+			const id = `mermaid-block-${Date.now()}-${nextMermaidRenderId()}`;
 
 			const { svg } = await mermaid.default.render(id, source.trim());
-			if (containerRef) {
+			if (!destroyed && serial === renderSerial && containerRef) {
 				// eslint-disable-next-line svelte/no-dom-manipulating -- mermaid outputs raw SVG strings; direct innerHTML is the only viable injection path.
 				containerRef.innerHTML = svg;
 				errorMessage = null;
 			}
 		} catch (err: unknown) {
+			if (destroyed || serial !== renderSerial) return;
 			const msg = err instanceof Error ? err.message : String(err);
 			// Strip common mermaid prefix noise for readability.
 			errorMessage = msg.replace(/^[\s\S]*?Parse error on line/, 'Parse error on line');
@@ -66,7 +83,7 @@
 
 	function cleanupMermaidErrors() {
 		if (typeof document === 'undefined') return;
-		const orphans = document.querySelectorAll('#d' + 'mermaid-block');
+		const orphans = document.querySelectorAll('[id^="dmermaid-block-"]');
 		orphans.forEach((el) => el.remove());
 	}
 </script>

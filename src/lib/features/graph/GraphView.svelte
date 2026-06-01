@@ -251,7 +251,7 @@
 		unsubGraphData?.();
 		unsubEdges?.();
 		unsubNeighbors?.();
-		graphStore.stopSimulation();
+		graphStore.destroy();
 		window.removeEventListener('mousemove', handleMouseMove);
 		window.removeEventListener('mouseup', handleMouseUp);
 	});

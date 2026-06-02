@@ -23,7 +23,7 @@
 | QA-009 | Status bar live values | Required | Required | Branch/sync/count/version values display correctly |
 | QA-010 | Keyboard shortcuts | Required | Required | Ctrl+P/Ctrl+S/Ctrl+B/Ctrl+N behave consistently |
 | QA-011 | Packaging | Required | Required | Installer/binary launches and runs smoke suite |
-| QA-012 | Linux Monaco load stability (dev mode) | Required | N/A | `npx tauri dev` + open code file does not reset/crash, no repeated `WebLoaderStrategy::internallyFailedLoadTimerFired` loop, and no repeated Monaco `Missing requestHandler` worker errors |
+| QA-012 | Linux Monaco load stability (dev + prod) | Required | N/A | `npx tauri dev` and `npx tauri build` + open code file does not reset/crash; no repeated `WebLoaderStrategy::internallyFailedLoadTimerFired` loop; no repeated Monaco `Missing requestHandler` worker errors; inline workers used on all Linux Tauri builds; transient failures auto-retry up to 2 times with exponential backoff; user-facing retry button shown if all retries exhausted |
 | QA-013 | Markdown Mermaid render | Required | Required | ` ```mermaid ` fenced blocks render in preview mode; invalid diagrams show fallback without crashing |
 
 ## Expansion Matrix (Epic 4)
@@ -97,6 +97,36 @@ Release candidate is blocked if any of these fail:
 - Any required smoke test.
 - Any security test for plugin capability isolation.
 - Performance budgets exceeded by > 10% at p95.
+
+## QA-012 Environment Baseline (Task 3.5.3)
+
+The following environment was used to reproduce and validate the Linux Monaco crash fix:
+
+| Field | Value |
+|---|---|
+| Distro | Fedora KDE |
+| Compositor | Hyprland (Wayland) |
+| GPU | Intel ADL GT2 |
+| Driver | Mesa 25.3.6 (OpenGL 4.6, direct rendering: Yes) |
+| WebKitGTK | libwebkit2gtk-4.1 (Tauri 2.x default) |
+| Tauri | 2.x (see `src-tauri/Cargo.toml`) |
+| Monaco | 0.55.x (see `package.json`) |
+
+**Original crash trace:**
+```
+ERROR: WebKit encountered an internal error. This is a WebKit bug.
+WebLoaderStrategy.cpp(618) : internallyFailedLoadTimerFired()
+```
+
+**Root cause:** WebKitGTK intermittently fails loading web worker blob/URL resources. Monaco workers constructed via `new Worker(url)` trigger fetch requests that WebKitGTK's internal loader can time out on, leading to cascading failures.
+
+**Mitigation applied (Task 3.5.3):**
+1. Inline workers (`?worker&inline`) used on all Linux Tauri builds (not just dev mode).
+2. Worker construction failures are transient-safe: consecutive failure counter replaces permanent disable flag.
+3. CodeEditor auto-retries Monaco load up to 2 times with exponential backoff (500ms, 1000ms).
+4. User-facing "Retry" button shown if all auto-retries are exhausted.
+
+**Trade-off:** Inline workers increase the Linux bundle by ~200-400 KB (worker JS embedded as data-URIs). This is acceptable given the alternative is a hard crash. Windows and macOS builds are unaffected; they continue to use standard URL-based workers.
 
 ## Evidence Collection
 For each executed test, record:

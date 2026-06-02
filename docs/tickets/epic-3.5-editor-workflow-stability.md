@@ -63,6 +63,12 @@ Acceptance Criteria:
   - `WebLoaderStrategy.cpp(618) : internallyFailedLoadTimerFired()`
   - Repeats during code-file open path, interleaved with backend perf logs
 
+### Resolution (2026-03-18)
+- **Root cause:** WebKitGTK intermittently fails loading web worker blob/URL resources, causing `internallyFailedLoadTimerFired` cascades during Monaco worker initialization.
+- **Fix:** Extended inline worker mode (`?worker&inline`) to all Linux Tauri builds (previously dev-only). Added retry logic with exponential backoff (2 auto-retries, 500ms/1000ms delays) and user-facing retry button. Made worker failure tracking non-permanent (consecutive counter replaces hard disable flag).
+- **Trade-off:** Inline workers add ~200-400 KB to the Linux bundle. Windows/macOS are unaffected.
+- **Validation:** Static analysis (all CI-equivalent checks pass). Runtime validation requires manual `npx tauri dev` on the documented Linux environment.
+
 ## Task [3.5.4]: Remove Explorer Metadata Blocks
 Goal: Simplify Explorer by removing non-essential notes/files metadata blocks.
 Commands/Code:

@@ -141,6 +141,7 @@
 			try {
 				await writeFile(codeStore.filePath, codeStore.content);
 				codeStore.markClean();
+				editorStore.setDirty(false);
 			} catch (err: unknown) {
 				const message = err instanceof Error ? err.message : String(err);
 				console.error('[shortcut] code save failed:', message);
@@ -153,6 +154,44 @@
 	function createNewNote() {
 		// TODO: Wire to create_note IPC command once available.
 		console.log('[shortcut] create new note');
+	}
+
+	/**
+	 * Flush live editor content from codeStore/noteStore back into editorStore
+	 * so the tab cache captures unsaved edits before any tab switch or close.
+	 */
+	function flushLiveContent() {
+		if (!editorState.activeFile) return;
+		if (
+			!isMarkdownFile(editorState.activeFile) &&
+			codeStore.filePath === editorState.activeFile
+		) {
+			editorStore.updateContent(codeStore.content);
+			if (codeStore.isDirty !== editorState.isDirty) {
+				editorStore.setDirty(codeStore.isDirty);
+			}
+		}
+		if (
+			isMarkdownFile(editorState.activeFile) &&
+			noteStore.filePath === editorState.activeFile
+		) {
+			editorStore.updateContent(noteStore.content);
+			if (noteStore.isDirty !== editorState.isDirty) {
+				editorStore.setDirty(noteStore.isDirty);
+			}
+		}
+	}
+
+	/** Handle tab activation from the tab bar. */
+	function handleTabActivate(path: string) {
+		flushLiveContent();
+		editorStore.activateTab(path);
+	}
+
+	/** Handle tab close from the tab bar. */
+	function handleTabClose(path: string) {
+		flushLiveContent();
+		editorStore.closeFile(path);
 	}
 
 	// Side-by-side is an explicit user mode. Default editing uses a single adaptive pane.
@@ -195,6 +234,31 @@
 		shortcutRegistry.register('ctrl+\\', () => uiStore.toggleRightPanel(), { global: true });
 		shortcutRegistry.register('ctrl+n', createNewNote, { global: true });
 		shortcutRegistry.register('ctrl+.', () => noteStore.toggleViewMode(), { global: true });
+		// Tab navigation shortcuts — flush live edits before switching
+		shortcutRegistry.register(
+			'ctrl+tab',
+			() => {
+				flushLiveContent();
+				editorStore.nextTab();
+			},
+			{ global: true }
+		);
+		shortcutRegistry.register(
+			'ctrl+shift+tab',
+			() => {
+				flushLiveContent();
+				editorStore.prevTab();
+			},
+			{ global: true }
+		);
+		shortcutRegistry.register(
+			'ctrl+w',
+			() => {
+				flushLiveContent();
+				editorStore.closeActiveTab();
+			},
+			{ global: true }
+		);
 
 		window.addEventListener('mousemove', handleActivity, { capture: true, passive: true });
 		window.addEventListener('mousedown', handleActivity, { capture: true, passive: true });
@@ -228,6 +292,9 @@
 		shortcutRegistry.unregister('ctrl+\\');
 		shortcutRegistry.unregister('ctrl+n');
 		shortcutRegistry.unregister('ctrl+.');
+		shortcutRegistry.unregister('ctrl+tab');
+		shortcutRegistry.unregister('ctrl+shift+tab');
+		shortcutRegistry.unregister('ctrl+w');
 
 		window.removeEventListener('mousemove', handleActivity, { capture: true });
 		window.removeEventListener('mousedown', handleActivity, { capture: true });
@@ -284,10 +351,22 @@
 				filePath={editorState.noteFile}
 				content={editorState.noteContent}
 				pane="note"
+				activeTab={editorState.activeFile}
+				tabs={editorState.openFiles}
+				onactivatetab={handleTabActivate}
+				onclosetab={handleTabClose}
 			/>
 		{:else}
 			<!-- Default mode: one pane that switches between note/code by active file type. -->
-			<EditorRouter filePath={activePaneFile} content={activePaneContent} pane="auto" />
+			<EditorRouter
+				filePath={activePaneFile}
+				content={activePaneContent}
+				pane="auto"
+				activeTab={editorState.activeFile}
+				tabs={editorState.openFiles}
+				onactivatetab={handleTabActivate}
+				onclosetab={handleTabClose}
+			/>
 		{/if}
 	</WorkspaceGrid>
 

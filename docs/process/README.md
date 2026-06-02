@@ -10,6 +10,7 @@ Repository-level delivery standards for human and local agent workflows.
 4. `epic-3-completion-checklist-2026-03-12.md` -- prefilled Epic 3 baseline checklist from latest deep re-review.
 5. `product-owner-orchestrator-agent-prompt.md` -- reusable PO-style orchestration prompt for delegating work to developer agents.
 6. `product-owner-epic3-first-run-message.md` -- copy/paste kickoff message to launch Epic 3 recovery orchestration.
+7. `product-owner-epic3-5-first-run-message.md` -- copy/paste kickoff message to launch Epic 3.5 orchestration.
 
 ## Policy
 

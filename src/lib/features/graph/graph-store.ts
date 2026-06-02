@@ -241,6 +241,7 @@ function createGraphStore() {
 	});
 
 	let animFrameId: number | null = null;
+	let loadRequestId = 0;
 
 	function stopSimulation() {
 		if (animFrameId !== null) {
@@ -274,13 +275,20 @@ function createGraphStore() {
 		animFrameId = requestAnimationFrame(tick);
 	}
 
+	function cancelLoad() {
+		loadRequestId += 1;
+		stopSimulation();
+		store.update((s) => ({ ...s, isLoading: false }));
+	}
+
 	return {
 		subscribe: store.subscribe,
 
 		/** Load graph data from backend or fallback to mock. */
 		async loadGraph(width: number = 400, height: number = 400) {
-			store.update((s) => ({ ...s, isLoading: true, error: null, usingMockData: false }));
+			const requestId = ++loadRequestId;
 			stopSimulation();
+			store.update((s) => ({ ...s, isLoading: true, error: null, usingMockData: false }));
 
 			let noteNodes: NoteNode[];
 			let linkEdges: LinkEdge[];
@@ -298,6 +306,8 @@ function createGraphStore() {
 				linkEdges = MOCK_EDGES;
 				isMock = true;
 			}
+
+			if (requestId !== loadRequestId) return;
 
 			const nodes = createLayoutNodes(noteNodes, width, height);
 			const edges = createGraphEdges(linkEdges);
@@ -396,9 +406,12 @@ function createGraphStore() {
 		/** Stop the force simulation. */
 		stopSimulation,
 
+		/** Cancel any in-flight load and stop animation work. */
+		cancelLoad,
+
 		/** Destroy the store and cleanup. */
 		destroy() {
-			stopSimulation();
+			cancelLoad();
 		}
 	};
 }

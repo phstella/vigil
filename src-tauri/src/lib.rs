@@ -4,10 +4,10 @@ pub mod events;
 pub mod models;
 pub mod state;
 
-use tauri::Manager;
+use tauri::{Manager, RunEvent, WindowEvent};
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(state::AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::workspace::open_workspace,
@@ -35,6 +35,20 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Vigil");
+        .build(tauri::generate_context!())
+        .expect("error while building Vigil");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::WindowEvent {
+            event: WindowEvent::CloseRequested { .. },
+            ..
+        } = &event
+        {
+            // Stop the file watcher and release workspace state before the
+            // window is destroyed. Without this, the watcher thread can race
+            // against process teardown and crash the Wayland compositor.
+            let app_state = app_handle.state::<state::AppState>();
+            app_state.clear_all();
+        }
+    });
 }

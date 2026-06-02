@@ -34,6 +34,14 @@ import type {
 
 /** Accumulated unlisten functions for teardown. */
 let unlisteners: UnlistenFn[] = [];
+let watcherGeneration = 0;
+
+function clearUnlisteners(): void {
+	for (const unlisten of unlisteners) {
+		unlisten();
+	}
+	unlisteners = [];
+}
 
 // ---------------------------------------------------------------------------
 // Event handlers
@@ -138,6 +146,9 @@ function handleFsRenamed(payload: FsRenamedPayload): void {
  * Returns a promise that resolves when all subscriptions are active.
  */
 export async function initFileWatcher(): Promise<void> {
+	const generation = ++watcherGeneration;
+	clearUnlisteners();
+
 	const listeners = await Promise.all([
 		onIndexUpdated(handleIndexUpdated),
 		onIndexReady(handleIndexReady),
@@ -146,6 +157,13 @@ export async function initFileWatcher(): Promise<void> {
 		onFsRenamed(handleFsRenamed)
 	]);
 
+	if (generation !== watcherGeneration) {
+		for (const unlisten of listeners) {
+			unlisten();
+		}
+		return;
+	}
+
 	unlisteners = listeners;
 }
 
@@ -153,8 +171,6 @@ export async function initFileWatcher(): Promise<void> {
  * Unsubscribe from all file-watcher events. Safe to call multiple times.
  */
 export function teardownFileWatcher(): void {
-	for (const unlisten of unlisteners) {
-		unlisten();
-	}
-	unlisteners = [];
+	watcherGeneration += 1;
+	clearUnlisteners();
 }

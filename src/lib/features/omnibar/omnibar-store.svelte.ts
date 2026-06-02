@@ -4,9 +4,10 @@
  * Manages the search query, live fuzzy-find results from the backend,
  * and keyboard selection index for the floating omnibar overlay.
  *
- * Supports two modes:
+ * Supports three modes:
  * - **file**: fuzzy filename search via `fuzzy_find` IPC (Ctrl+P)
  * - **content**: phrase/snippet search via `search_content` IPC (Ctrl+Shift+F)
+ * - **command**: local internal actions via `> command` or Ctrl+Shift+P
  *
  * Calls the appropriate IPC command with debouncing to meet performance budgets:
  * - File mode: <=80 ms first-result-render
@@ -15,8 +16,23 @@
 
 import { fuzzyFind, searchContent } from '$lib/ipc/search';
 import { isVigilError } from '$lib/ipc/tauri';
+import { ensureCommandQuery, parseOmnibarQuery } from './omnibar-parser';
 import type { FuzzyMatch, ContentMatch } from '$lib/types/ipc';
 import type { OmnibarMode } from '$lib/types/store';
+
+/** Internal command definition supplied by the app shell. */
+export interface OmnibarCommand {
+	/** Stable command identifier. */
+	id: string;
+	/** Primary command label. */
+	title: string;
+	/** Secondary context shown under the title. */
+	subtitle?: string;
+	/** Extra searchable aliases. */
+	keywords?: string[];
+	/** Execute the command action. */
+	run: () => void | Promise<void>;
+}
 
 /** Result from file (fuzzy) search mode. */
 export interface OmnibarFileResult {
@@ -64,8 +80,28 @@ export interface OmnibarContentResult {
 	score: number;
 }
 
+/** Result from command mode. */
+export interface OmnibarCommandResult {
+	/** Discriminant tag. */
+	type: 'command';
+	/** Unique identifier for the result item. */
+	id: string;
+	/** Stable command identifier. */
+	commandId: string;
+	/** Primary command label. */
+	title: string;
+	/** Secondary context shown under the title. */
+	subtitle: string;
+	/** Extra searchable aliases. */
+	keywords: string[];
+	/** Local match score. */
+	score: number;
+	/** Execute the command action. */
+	run: () => void | Promise<void>;
+}
+
 /** Union type for all omnibar results. */
-export type OmnibarResult = OmnibarFileResult | OmnibarContentResult;
+export type OmnibarResult = OmnibarFileResult | OmnibarContentResult | OmnibarCommandResult;
 
 /**
  * Debounce delay in milliseconds for file search IPC calls.
@@ -121,6 +157,48 @@ function toContentResult(match: ContentMatch, index: number): OmnibarContentResu
 	};
 }
 
+/** Score a command against a user query. Higher is better; 0 means no match. */
+function scoreCommand(command: OmnibarCommand, query: string): number {
+	const normalizedQuery = query.trim().toLowerCase();
+	if (normalizedQuery === '') return 1;
+
+	const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+	const title = command.title.toLowerCase();
+	const subtitle = command.subtitle?.toLowerCase() ?? '';
+	const keywords = command.keywords?.map((keyword) => keyword.toLowerCase()) ?? [];
+	const haystack = [command.id.toLowerCase(), title, subtitle, ...keywords].join(' ');
+
+	if (!tokens.every((token) => haystack.includes(token))) return 0;
+
+	return tokens.reduce((score, token) => {
+		if (title.startsWith(token)) return score + 100;
+		if (title.includes(token)) return score + 70;
+		if (keywords.some((keyword) => keyword.startsWith(token))) return score + 50;
+		return score + 25;
+	}, 0);
+}
+
+/** Convert an OmnibarCommand into an OmnibarCommandResult. */
+function toCommandResult(
+	command: OmnibarCommand,
+	query: string,
+	index: number
+): OmnibarCommandResult | null {
+	const score = scoreCommand(command, query);
+	if (score === 0) return null;
+
+	return {
+		type: 'command',
+		id: `command-${command.id}-${index}`,
+		commandId: command.id,
+		title: command.title,
+		subtitle: command.subtitle ?? '',
+		keywords: command.keywords ?? [],
+		score,
+		run: command.run
+	};
+}
+
 function createOmnibarStore() {
 	let query = $state('');
 	let mode = $state<OmnibarMode>('file');
@@ -128,6 +206,7 @@ function createOmnibarStore() {
 	let results = $state<OmnibarResult[]>([]);
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
+	let commands: OmnibarCommand[] = [];
 
 	/** Handle for the debounce timer. */
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -217,9 +296,22 @@ function createOmnibarStore() {
 		}
 	}
 
+	/** Execute a local command search. */
+	function executeCommandSearch(q: string): void {
+		isLoading = false;
+		error = null;
+		results = commands
+			.map((command, index) => toCommandResult(command, q, index))
+			.filter((result): result is OmnibarCommandResult => result !== null)
+			.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+		selectedIndex = 0;
+	}
+
 	/** Execute a search using the appropriate backend based on current mode. */
-	function executeSearch(q: string, rid: number): void {
-		if (mode === 'content') {
+	function executeSearch(searchMode: OmnibarMode, q: string, rid: number): void {
+		if (searchMode === 'command') {
+			executeCommandSearch(q);
+		} else if (searchMode === 'content') {
 			void executeContentSearch(q, rid);
 		} else {
 			void executeFileSearch(q, rid);
@@ -227,8 +319,8 @@ function createOmnibarStore() {
 	}
 
 	/** Get the appropriate debounce delay for the current mode. */
-	function getDebounceMs(): number {
-		return mode === 'content' ? CONTENT_DEBOUNCE_MS : FILE_DEBOUNCE_MS;
+	function getDebounceMs(searchMode: OmnibarMode): number {
+		return searchMode === 'content' ? CONTENT_DEBOUNCE_MS : FILE_DEBOUNCE_MS;
 	}
 
 	return {
@@ -251,6 +343,16 @@ function createOmnibarStore() {
 			return error;
 		},
 
+		/** Replace available internal commands. */
+		setCommands(nextCommands: OmnibarCommand[]) {
+			commands = nextCommands;
+			if (mode === 'command') {
+				const parsed = parseOmnibarQuery(query, mode);
+				requestId++;
+				executeCommandSearch(parsed.query);
+			}
+		},
+
 		/**
 		 * Update the search query and trigger a debounced IPC call.
 		 * Empty queries in file mode fetch recent files; in content mode, clear results.
@@ -264,8 +366,19 @@ function createOmnibarStore() {
 			selectedIndex = 0;
 			clearDebounce();
 
-			if (value.trim() === '') {
-				if (mode === 'file') {
+			const parsed = parseOmnibarQuery(value, mode);
+			if (parsed.mode !== mode) {
+				mode = parsed.mode;
+			}
+
+			if (parsed.mode === 'command') {
+				requestId++;
+				executeCommandSearch(parsed.query);
+				return;
+			}
+
+			if (parsed.query.trim() === '') {
+				if (parsed.mode === 'file') {
 					// For empty query in file mode, still call backend (returns recent files per spec).
 					requestId++;
 					const rid = requestId;
@@ -284,9 +397,9 @@ function createOmnibarStore() {
 
 			// Leading-edge: fire immediately on first keystroke in file mode
 			// so results appear within the 80ms budget.
-			if (mode === 'file' && !leadingEdgeFired) {
+			if (parsed.mode === 'file' && !leadingEdgeFired) {
 				leadingEdgeFired = true;
-				executeSearch(value, rid);
+				executeSearch(parsed.mode, parsed.query, rid);
 				// Set a trailing timer to catch the final query after rapid typing
 				debounceTimer = setTimeout(() => {
 					debounceTimer = null;
@@ -294,9 +407,10 @@ function createOmnibarStore() {
 					// Only re-fire if the query changed since the leading call
 					if (query !== value) {
 						requestId++;
-						executeSearch(query, requestId);
+						const latest = parseOmnibarQuery(query, mode);
+						executeSearch(latest.mode, latest.query, requestId);
 					}
-				}, getDebounceMs());
+				}, getDebounceMs(parsed.mode));
 				return;
 			}
 
@@ -304,8 +418,8 @@ function createOmnibarStore() {
 			debounceTimer = setTimeout(() => {
 				debounceTimer = null;
 				leadingEdgeFired = false;
-				executeSearch(value, rid);
-			}, getDebounceMs());
+				executeSearch(parsed.mode, parsed.query, rid);
+			}, getDebounceMs(parsed.mode));
 		},
 
 		/**
@@ -319,6 +433,19 @@ function createOmnibarStore() {
 			results = [];
 			selectedIndex = 0;
 
+			if (newMode === 'command') {
+				query = ensureCommandQuery(query);
+				const parsed = parseOmnibarQuery(query, newMode);
+				requestId++;
+				executeCommandSearch(parsed.query);
+				return;
+			}
+
+			const parsed = parseOmnibarQuery(query, newMode);
+			if (parsed.hasCommandPrefix) {
+				query = parsed.query;
+			}
+
 			// Re-execute with current query in the new mode.
 			if (query.trim() === '' && newMode === 'file') {
 				requestId++;
@@ -327,14 +454,18 @@ function createOmnibarStore() {
 			} else if (query.trim() !== '') {
 				requestId++;
 				const rid = requestId;
-				executeSearch(query, rid);
+				executeSearch(newMode, query, rid);
 			}
 		},
 
 		/** Trigger an initial search when the omnibar opens. */
 		initialize(initialMode: OmnibarMode = 'file') {
 			mode = initialMode;
-			if (initialMode === 'file') {
+			if (initialMode === 'command') {
+				query = ensureCommandQuery(query);
+				requestId++;
+				executeCommandSearch(parseOmnibarQuery(query, initialMode).query);
+			} else if (initialMode === 'file') {
 				requestId++;
 				const rid = requestId;
 				void executeFileSearch('', rid);

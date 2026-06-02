@@ -131,7 +131,7 @@ export interface SettingsState {
 export type SidebarSection = 'explorer' | 'search' | 'graph' | 'tags';
 
 /** Omnibar search mode. */
-export type OmnibarMode = 'file' | 'content';
+export type OmnibarMode = 'file' | 'content' | 'command';
 
 export interface UiState {
 	/** Whether the sidebar is visible. */

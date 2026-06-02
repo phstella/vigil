@@ -7,6 +7,7 @@
 	import PrimaryRail from '$lib/components/chrome/PrimaryRail.svelte';
 	import EditorRouter from '$lib/features/editor/EditorRouter.svelte';
 	import Omnibar from '$lib/features/omnibar/Omnibar.svelte';
+	import type { OmnibarCommand } from '$lib/features/omnibar';
 	import StatusBar from '$lib/features/status/StatusBar.svelte';
 	import { statusStore } from '$lib/features/status/status-store';
 	import {
@@ -20,7 +21,7 @@
 	import { shortcutRegistry } from '$lib/utils/shortcuts';
 	import { noteStore } from '$lib/features/editor/note-store.svelte';
 	import { codeStore, detectLanguage } from '$lib/features/editor/code-store.svelte';
-	import { readFile, writeFile } from '$lib/ipc/files';
+	import { createNote, readFile, writeFile } from '$lib/ipc/files';
 	import { isMarkdownFile } from '$lib/utils/file-routing';
 	import type { Section } from '$lib/components/chrome/PrimaryRail.svelte';
 	import type { EditorState, SettingsState, UiState } from '$lib/types/store';
@@ -150,10 +151,20 @@
 		}
 	}
 
-	/** Placeholder new note action. */
-	function createNewNote() {
-		// TODO: Wire to create_note IPC command once available.
-		console.log('[shortcut] create new note');
+	/** Create and open a new markdown note via IPC. */
+	async function createNewNote() {
+		const timestamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
+		const requestedPath = `Untitled-${timestamp}.md`;
+
+		try {
+			const created = await createNote(requestedPath);
+			noteStore.load(created.path, '', created.etag);
+			noteStore.setViewMode('edit');
+			editorStore.openFileRouted(created.path, '', 'markdown');
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err);
+			console.error('[shortcut] create new note failed:', message);
+		}
 	}
 
 	/**
@@ -210,6 +221,75 @@
 		return editorState.codeFile === activePath ? editorState.codeContent : editorState.content;
 	});
 
+	const omnibarCommands: OmnibarCommand[] = [
+		{
+			id: 'save-current-file',
+			title: 'Save current file',
+			subtitle: 'Write the active note or code file to disk',
+			keywords: ['save', 'write', 'persist', 'ctrl+s'],
+			run: saveCurrentFile
+		},
+		{
+			id: 'new-note',
+			title: 'New note',
+			subtitle: 'Create a markdown note in the current workspace',
+			keywords: ['create', 'markdown', 'file', 'ctrl+n'],
+			run: createNewNote
+		},
+		{
+			id: 'toggle-sidebar',
+			title: 'Toggle sidebar',
+			subtitle: 'Show or hide the left sidebar',
+			keywords: ['sidebar', 'panel', 'ctrl+b'],
+			run: () => uiStore.toggleSidebar()
+		},
+		{
+			id: 'show-explorer',
+			title: 'Show explorer',
+			subtitle: 'Open the file explorer panel',
+			keywords: ['files', 'tree', 'sidebar'],
+			run: () => uiStore.setSidebarSection('explorer')
+		},
+		{
+			id: 'show-search',
+			title: 'Show search',
+			subtitle: 'Open the sidebar search panel',
+			keywords: ['find', 'content', 'sidebar'],
+			run: () => uiStore.setSidebarSection('search')
+		},
+		{
+			id: 'show-graph',
+			title: 'Show graph',
+			subtitle: 'Open the note graph panel',
+			keywords: ['links', 'backlinks', 'network', 'sidebar'],
+			run: () => uiStore.setSidebarSection('graph')
+		},
+		{
+			id: 'toggle-side-by-side',
+			title: 'Toggle side-by-side editor',
+			subtitle: 'Show or hide the optional right editor pane',
+			keywords: ['split', 'right panel', 'code', 'ctrl+\\'],
+			run: () => uiStore.toggleRightPanel()
+		},
+		{
+			id: 'toggle-markdown-preview',
+			title: 'Toggle markdown preview',
+			subtitle: 'Switch the active note between edit and preview mode',
+			keywords: ['preview', 'markdown', 'render', 'ctrl+.'],
+			run: () => noteStore.toggleViewMode()
+		},
+		{
+			id: 'close-active-tab',
+			title: 'Close active tab',
+			subtitle: 'Close the current editor tab',
+			keywords: ['close', 'tab', 'ctrl+w'],
+			run: () => {
+				flushLiveContent();
+				editorStore.closeActiveTab();
+			}
+		}
+	];
+
 	onMount(() => {
 		cleanupEditorSubscription = editorStore.subscribe((s) => {
 			editorState = s;
@@ -226,6 +306,9 @@
 		});
 
 		shortcutRegistry.register('ctrl+p', () => uiStore.toggleOmnibar(), { global: true });
+		shortcutRegistry.register('ctrl+shift+p', () => uiStore.openOmnibar('command'), {
+			global: true
+		});
 		shortcutRegistry.register('ctrl+shift+f', () => uiStore.openOmnibar('content'), {
 			global: true
 		});
@@ -286,6 +369,7 @@
 
 	onDestroy(() => {
 		shortcutRegistry.unregister('ctrl+p');
+		shortcutRegistry.unregister('ctrl+shift+p');
 		shortcutRegistry.unregister('ctrl+shift+f');
 		shortcutRegistry.unregister('ctrl+s');
 		shortcutRegistry.unregister('ctrl+b');
@@ -389,5 +473,6 @@
 		onclose={handleOmnibarClose}
 		onselect={handleOmnibarSelect}
 		initialMode={uiState.omnibarMode}
+		commands={omnibarCommands}
 	/>
 {/if}

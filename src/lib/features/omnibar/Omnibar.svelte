@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Omnibar -- Floating overlay for file and content search.
+	 * Omnibar -- Floating overlay for file, content, and command search.
 	 *
 	 * Renders a centered modal near the top of the viewport with a text
 	 * input, mode tabs (File / Content), and live search results from the
@@ -12,25 +12,36 @@
 	import { omnibarStore } from './omnibar-store.svelte';
 	import OmnibarItem from './OmnibarItem.svelte';
 	import { perfTimer } from '$lib/utils/perf';
+	import type { OmnibarCommand, OmnibarCommandResult } from './omnibar-store.svelte';
 	import type { OmnibarMode } from '$lib/types/store';
 
 	let {
 		onclose,
 		onselect,
-		initialMode = 'file' as OmnibarMode
+		initialMode = 'file' as OmnibarMode,
+		commands = []
 	}: {
 		onclose: () => void;
 		onselect?: (path: string, lineNumber?: number) => void;
 		initialMode?: OmnibarMode;
+		commands?: OmnibarCommand[];
 	} = $props();
 
 	let inputEl: HTMLInputElement | undefined = $state();
+	let initialized = false;
 
 	/** Perf timer: measures time from omnibar open to first paint. */
 	const openTimer = perfTimer('omnibar-open', 80);
 
 	/** Auto-focus the input and trigger initial search when the component mounts. */
 	$effect(() => {
+		omnibarStore.setCommands(commands);
+	});
+
+	/** Auto-focus the input and trigger initial search when the input is mounted. */
+	$effect(() => {
+		if (!inputEl || initialized) return;
+		initialized = true;
 		inputEl?.focus();
 		omnibarStore.initialize(initialMode);
 		// Measure first paint after mount
@@ -60,10 +71,14 @@
 				e.preventDefault();
 				const selected = omnibarStore.selectCurrent();
 				if (selected) {
-					const lineNumber =
-						selected.type === 'content' ? selected.lineNumber : undefined;
-					onselect?.(selected.path, lineNumber);
-					onclose();
+					if (selected.type === 'command') {
+						void executeCommand(selected);
+					} else {
+						const lineNumber =
+							selected.type === 'content' ? selected.lineNumber : undefined;
+						onselect?.(selected.path, lineNumber);
+						onclose();
+					}
 				}
 				break;
 			}
@@ -72,9 +87,11 @@
 				onclose();
 				break;
 			case 'Tab': {
-				// Tab toggles between file and content mode.
+				// Tab cycles between file, content, and command mode.
 				e.preventDefault();
-				const nextMode: OmnibarMode = omnibarStore.mode === 'file' ? 'content' : 'file';
+				const modes: OmnibarMode[] = ['file', 'content', 'command'];
+				const currentIndex = modes.indexOf(omnibarStore.mode);
+				const nextMode = modes[(currentIndex + 1) % modes.length];
 				omnibarStore.setMode(nextMode);
 				break;
 			}
@@ -97,17 +114,43 @@
 		onclose();
 	}
 
+	async function executeCommand(command: OmnibarCommandResult) {
+		try {
+			await command.run();
+		} catch (err) {
+			console.error('[omnibar] command failed:', command.commandId, err);
+		} finally {
+			onclose();
+		}
+	}
+
 	function switchMode(newMode: OmnibarMode) {
 		omnibarStore.setMode(newMode);
 		inputEl?.focus();
 	}
 
 	let placeholderText = $derived(
-		omnibarStore.mode === 'content' ? 'Search file contents...' : 'Type to search files...'
+		omnibarStore.mode === 'command'
+			? '> Run command...'
+			: omnibarStore.mode === 'content'
+				? 'Search file contents...'
+				: 'Type to search files...'
 	);
 
 	let emptyMessage = $derived(
-		omnibarStore.mode === 'content' ? 'No content matches found.' : 'No matching files found.'
+		omnibarStore.mode === 'command'
+			? 'No matching commands found.'
+			: omnibarStore.mode === 'content'
+				? 'No content matches found.'
+				: 'No matching files found.'
+	);
+
+	let dialogLabel = $derived(
+		omnibarStore.mode === 'command'
+			? 'Command search'
+			: omnibarStore.mode === 'content'
+				? 'Content search'
+				: 'File search'
 	);
 </script>
 
@@ -117,7 +160,7 @@
 	onmousedown={handleBackdropClick}
 	role="dialog"
 	aria-modal="true"
-	aria-label={omnibarStore.mode === 'content' ? 'Content search' : 'File search'}
+	aria-label={dialogLabel}
 	tabindex="-1"
 >
 	<div
@@ -147,6 +190,17 @@
 				Content
 				<span class="ml-1 text-[10px] text-text-muted">Ctrl+Shift+F</span>
 			</button>
+			<button
+				type="button"
+				class="flex-1 px-3 py-1.5 text-xs font-medium transition-colors {omnibarStore.mode ===
+				'command'
+					? 'border-b-2 border-accent text-accent'
+					: 'text-text-muted hover:text-text-secondary'}"
+				onclick={() => switchMode('command')}
+			>
+				Commands
+				<span class="ml-1 text-[10px] text-text-muted">Ctrl+Shift+P</span>
+			</button>
 		</div>
 
 		<!-- Search input -->
@@ -172,7 +226,7 @@
 				placeholder={placeholderText}
 				value={omnibarStore.query}
 				oninput={handleInput}
-				aria-label={omnibarStore.mode === 'content' ? 'Search content' : 'Search files'}
+				aria-label={dialogLabel}
 				aria-autocomplete="list"
 				aria-controls="omnibar-results"
 				role="combobox"
@@ -198,9 +252,13 @@
 						{item}
 						isSelected={i === omnibarStore.selectedIndex}
 						onclick={() => {
-							const lineNumber =
-								item.type === 'content' ? item.lineNumber : undefined;
-							handleItemClick(item.path, lineNumber);
+							if (item.type === 'command') {
+								void executeCommand(item);
+							} else {
+								const lineNumber =
+									item.type === 'content' ? item.lineNumber : undefined;
+								handleItemClick(item.path, lineNumber);
+							}
 						}}
 					/>
 				{/each}

@@ -5,5 +5,9 @@ export { omnibarStore } from './omnibar-store.svelte';
 export type {
 	OmnibarResult,
 	OmnibarFileResult,
-	OmnibarContentResult
+	OmnibarContentResult,
+	OmnibarCommand,
+	OmnibarCommandResult
 } from './omnibar-store.svelte';
+export { parseOmnibarQuery, ensureCommandQuery } from './omnibar-parser';
+export type { ParsedOmnibarQuery } from './omnibar-parser';

@@ -2,11 +2,12 @@
 	/**
 	 * OmnibarItem -- A single result row in the omnibar results list.
 	 *
-	 * Supports two result types:
+	 * Supports three result types:
 	 * - **file**: Displays file icon, file name with fuzzy-match highlighting,
 	 *   workspace-relative path, and a match score badge.
 	 * - **content**: Displays file icon, file name with line number,
 	 *   preview snippet with match highlighting, and a score badge.
+	 * - **command**: Displays command label, command context, and a local score badge.
 	 *
 	 * Highlights the row when it is the currently selected item.
 	 */
@@ -49,6 +50,11 @@
 			default:
 				return '\u{1F4C1}';
 		}
+	}
+
+	function itemIcon(item: OmnibarResult): string {
+		if (item.type === 'command') return '>';
+		return fileIcon(item.ext, item.type === 'file' ? item.kind : undefined);
 	}
 
 	/**
@@ -127,9 +133,7 @@
 	role="option"
 	aria-selected={isSelected}
 >
-	<span class="shrink-0 text-sm" aria-hidden="true"
-		>{fileIcon(item.ext, item.type === 'file' ? item.kind : undefined)}</span
-	>
+	<span class="w-4 shrink-0 text-center text-sm" aria-hidden="true">{itemIcon(item)}</span>
 	<span class="flex min-w-0 flex-1 flex-col">
 		{#if item.type === 'file'}
 			<!-- File mode: name with fuzzy-match highlighting -->
@@ -144,7 +148,7 @@
 				{/each}
 			</span>
 			<span class="truncate text-xs text-text-muted">{item.path}</span>
-		{:else}
+		{:else if item.type === 'content'}
 			<!-- Content mode: file name + line number, preview with match highlighting -->
 			<span class="truncate text-sm font-medium">
 				{item.name}<span class="ml-1 text-xs text-text-muted">:{item.lineNumber}</span>
@@ -164,6 +168,11 @@
 				{/each}
 			</span>
 			<span class="truncate text-[10px] text-text-muted">{item.path}</span>
+		{:else}
+			<span class="truncate text-sm font-medium">{item.title}</span>
+			{#if item.subtitle}
+				<span class="truncate text-xs text-text-muted">{item.subtitle}</span>
+			{/if}
 		{/if}
 	</span>
 	{#if item.score > 0}
